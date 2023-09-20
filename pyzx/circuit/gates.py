@@ -725,6 +725,7 @@ class RXX(Gate):
         for gate in self.to_basic_gates():
             gate.to_graph(g, q_mapper, c_mapper)
 
+# TODO: This is a ParityPhase gate with 2 targets, maybe merge them?
 class RZZ(Gate):
     name = 'RZZ'
     qasm_name = 'rzz'
@@ -1129,6 +1130,9 @@ class CU(Gate):
     def to_graph(self, g, q_mapper, c_mapper):
         for gate in self.to_basic_gates():
             gate.to_graph(g, q_mapper, c_mapper)
+
+# TODO: Maybe add support for other gates listed in qelib1.inc/stdgates.inc: 'rccx', 'rc3x', 'c3x', 'c3sqrtx', 'c4x'.
+
 
 class InitAncilla(Gate):
     name = 'InitAncilla'

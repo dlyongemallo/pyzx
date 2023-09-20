@@ -26,13 +26,12 @@ mydir = os.path.dirname(__file__)
 
 try:
     import numpy as np
-    from pyzx.tensor import tensorfy, compare_tensors, tensor_to_matrix
+    from pyzx.tensor import compare_tensors
 except ImportError:
     np = None
 
 from pyzx.circuit import Circuit
 from fractions import Fraction
-SEED = 1337
 
 @unittest.skipUnless(np, "numpy needs to be installed for this to run")
 class TestCircuit(unittest.TestCase):
@@ -52,7 +51,6 @@ class TestCircuit(unittest.TestCase):
         self.assertListEqual(c1.gates,self.c.gates)
 
     def test_ry_preserves_graph_semantics(self):
-        g = self.c.to_graph()
-        t = tensor_to_matrix(tensorfy(g, False), 1, 1)
+        t = self.c.to_matrix()
         expected_t = np.asarray([[np.cos(np.pi/8), -np.sin(np.pi/8)], [np.sin(np.pi/8), np.cos(np.pi/8)]])
         self.assertTrue(compare_tensors(t, expected_t, False))
