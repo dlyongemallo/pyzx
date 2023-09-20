@@ -359,6 +359,44 @@ class TestQASM(unittest.TestCase):
 
         self.assertTrue(compare_tensors(t1, t3))
 
+    # @unittest.skipUnless(QuantumCircuit, "qiskit needs to be installed for this test")
+    # def test_rz_crz_definitions(self):
+    #     qasm2_rz = Circuit.from_qasm("""
+    #     OPENQASM 2.0;
+    #     include "qelib1.inc";
+    #     qreg q[1];
+    #     rz(pi/2) q[0];
+    #     """)
+    #     qasm2_rz_matrix = np.array([[1, 0], [0, 1j]])
+    #     self.assertTrue(compare_tensors(qasm2_rz.to_matrix(), qasm2_rz_matrix))
+
+    #     # Note: This will pass, even though the actual value of the matrix is
+    #     # np.array([[complex(sqrt_half,-sqrt_half),0],[0,complex(sqrt_half,sqrt_half)]]),
+    #     # since `compare_tensors` does not care about a global phase.
+    #     qiskit_rz = QuantumCircuit.from_qasm_str(qasm2_rz.to_qasm())
+    #     qiskit_rz_matrix = quantum_info.Operator(qiskit_rz).data
+    #     self.assertTrue(compare_tensors(qiskit_rz_matrix, qasm2_rz_matrix))
+
+    #     sqrt_half = math.sqrt(1/2)
+    #     qasm2_crz = Circuit.from_qasm("""
+    #     OPENQASM 2.0;
+    #     include "qelib1.inc";
+    #     qreg q[2];
+    #     crz(pi/2) q[0], q[1];
+    #     """)
+    #     qasm2_crz_matrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0],
+    #                                  [0, 0, complex(sqrt_half, -sqrt_half), 0], [0, 0, 0, complex(sqrt_half, sqrt_half)]])
+    #     self.assertTrue(compare_tensors(
+    #         qasm2_crz.to_matrix(), qasm2_crz_matrix))
+
+    #     # Note: qiskit uses the reverse ordering convention for the qubits.
+    #     swap = QuantumCircuit(2)
+    #     swap.swap(0, 1)
+    #     qiskit_crz = swap & QuantumCircuit.from_qasm_str(
+    #         qasm2_crz.to_qasm()) & swap
+    #     qiskit_crz_matrix = quantum_info.Operator(qiskit_crz).data
+    #     self.assertTrue(compare_tensors(qiskit_crz_matrix, qasm2_crz_matrix))
+
 
 if __name__ == '__main__':
     unittest.main()
