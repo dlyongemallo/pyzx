@@ -53,7 +53,9 @@ from typing_extensions import Literal
 from fractions import Fraction
 import itertools
 
-from .utils import VertexType, EdgeType, get_w_partner, toggle_edge, vertex_is_w, vertex_is_zx, FloatInt, FractionLike, get_w_io
+import numpy as np
+
+from .utils import VertexType, EdgeType, get_w_partner, get_z_box_label, set_z_box_label, toggle_edge, vertex_is_w, vertex_is_zx, FloatInt, FractionLike, get_w_io, vertex_is_z_like
 from .graph.base import BaseGraph, VT, ET
 
 RewriteOutputType = Tuple[Dict[ET,List[int]], List[VT], List[ET], bool]
@@ -174,7 +176,8 @@ def match_spider_parallel(
         v0, v1 = g.edge_st(e)
         v0t = types[v0]
         v1t = types[v1]
-        if (v0t == v1t and vertex_is_zx(v0t)):
+        if (v0t == v1t and vertex_is_zx(v0t)) or \
+            (vertex_is_z_like(v0t) and vertex_is_z_like(v1t)):
             i += 1
             for v in g.neighbors(v0):
                 for c in g.incident_edges(v): candidates.discard(c)
@@ -201,6 +204,13 @@ def spider(g: BaseGraph[VT,ET], matches: List[MatchSpiderType[VT]]) -> RewriteOu
         if ground:
             g.set_phase(v0, 0)
             g.set_ground(v0)
+        elif g.type(v0) == VertexType.Z_BOX or g.type(v1) == VertexType.Z_BOX:
+            if g.type(v0) == VertexType.Z:
+                z_to_z_box(g, [v0])
+            if g.type(v1) == VertexType.Z:
+                z_to_z_box(g, [v1])
+            g.set_phase(v0, 0)
+            set_z_box_label(g, v0, get_z_box_label(g, v0) * get_z_box_label(g, v1))
         else:
             g.add_to_phase(v0, g.phase(v1))
 
@@ -249,6 +259,36 @@ def unspider(g: BaseGraph[VT,ET], m: List[Any], qubit:FloatInt=-1, row:FloatInt=
         g.set_phase(v, g.phase(u))
         g.set_phase(u, 0)
     return v
+
+def match_z_to_z_box(g: BaseGraph[VT,ET]) -> List[VT]:
+    """Does the same as :func:`match_z_to_z_box_parallel` but with ``num=1``."""
+    return match_z_to_z_box_parallel(g, num=1)
+
+def match_z_to_z_box_parallel(
+        g: BaseGraph[VT,ET],
+        matchf:Optional[Callable[[VT],bool]]=None,
+        num:int=-1
+        ) -> List[VT]:
+    """Finds all vertices that can be converted to Z-boxes."""
+    if matchf is not None: candidates = set([v for v in g.vertices() if matchf(v)])
+    else: candidates = g.vertex_set()
+    types = g.types()
+    m = []
+    for v in candidates:
+        if types[v] == VertexType.Z:
+            if num == 0: break
+            m.append(v)
+            num -= 1
+    return m
+
+def z_to_z_box(g: BaseGraph[VT,ET], matches: List[VT]) -> RewriteOutputType[ET,VT]:
+    """Converts a Z vertex to a Z-box."""
+    for v in matches:
+        g.set_type(v, VertexType.Z_BOX)
+        label = np.round(np.e**(1j * np.pi * g.phase(v)), 8)
+        set_z_box_label(g, v, label)
+        g.set_phase(v, 0)
+    return ({}, [], [], True)
 
 MatchWType = Tuple[VT,VT]
 
@@ -766,12 +806,15 @@ def remove_ids(g: BaseGraph[VT,ET], matches: List[MatchIdType[VT]]) -> RewriteOu
 
 MatchGadgetType = Tuple[VT,VT,FractionLike,List[VT],List[VT]]
 
-def match_phase_gadgets(g: BaseGraph[VT,ET]) -> List[MatchGadgetType[VT]]:
+def match_phase_gadgets(g: BaseGraph[VT,ET],vertexf:Optional[Callable[[VT],bool]]=None) -> List[MatchGadgetType[VT]]:
     """Determines which phase gadgets act on the same vertices, so that they can be fused together.
 
     :param g: An instance of a ZX-graph.
     :rtype: List of 5-tuples ``(axel,leaf, total combined phase, other axels with same targets, other leafs)``.
     """
+    if vertexf is not None: candidates = set([v for v in g.vertices() if vertexf(v)])
+    else: candidates = g.vertex_set()
+
     phases = g.phases()
 
     parities: Dict[FrozenSet[VT], List[VT]] = dict()
@@ -779,7 +822,7 @@ def match_phase_gadgets(g: BaseGraph[VT,ET]) -> List[MatchGadgetType[VT]]:
     inputs = g.inputs()
     outputs = g.outputs()
     # First we find all the phase-gadgets, and the list of vertices they act on
-    for v in g.vertices():
+    for v in candidates:
         non_clifford = phases[v] != 0 and getattr(phases[v], 'denominator', 1) > 2
         try: # symbol check
             float(phases[v])
@@ -832,13 +875,14 @@ def merge_phase_gadgets(g: BaseGraph[VT,ET], matches: List[MatchGadgetType[VT]])
 
 MatchSupplementarityType = Tuple[VT,VT,Literal[1,2],FrozenSet[VT]]
 
-def match_supplementarity(g: BaseGraph[VT,ET]) -> List[MatchSupplementarityType[VT]]:
+def match_supplementarity(g: BaseGraph[VT,ET], vertexf:Optional[Callable[[VT],bool]]=None) -> List[MatchSupplementarityType[VT]]:
     """Finds pairs of non-Clifford spiders that are connected to exactly the same set of vertices.
 
     :param g: An instance of a ZX-graph.
     :rtype: List of 4-tuples ``(vertex1, vertex2, type of supplementarity, neighbors)``.
     """
-    candidates = g.vertex_set()
+    if vertexf is not None: candidates = set([v for v in g.vertices() if vertexf(v)])
+    else: candidates = g.vertex_set()
     phases = g.phases()
 
     parities: Dict[FrozenSet[VT],List[VT]] = dict()
