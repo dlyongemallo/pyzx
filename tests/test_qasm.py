@@ -175,7 +175,8 @@ class TestQASM(unittest.TestCase):
                                     f"Gate: {gate}\nqasm:\n{qasm}\npyzx_matrix:\n{pyzx_matrix}\nqiskit_matrix:\n{qiskit_matrix}")
 
                     # TODO: round-trip to specific OpenQASM version and back
-                    s = c.to_qasm()
+                    s = c.to_qasm(qasm_version)
+                    print(s)
                     c1 = Circuit.from_qasm(s)
                     self.assertEqual(c.qubits, c1.qubits)
                     self.assertListEqual(c.gates, c1.gates)
