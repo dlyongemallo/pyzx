@@ -174,12 +174,13 @@ class TestQASM(unittest.TestCase):
                     self.assertTrue(compare_tensors(pyzx_matrix, qiskit_matrix, False),
                                     f"Gate: {gate}\nqasm:\n{qasm}\npyzx_matrix:\n{pyzx_matrix}\nqiskit_matrix:\n{qiskit_matrix}")
 
-                    # TODO: round-trip to specific OpenQASM version and back
                     s = c.to_qasm(qasm_version)
-                    print(s)
-                    c1 = Circuit.from_qasm(s)
-                    self.assertEqual(c.qubits, c1.qubits)
-                    self.assertListEqual(c.gates, c1.gates)
+                    for g in c.gates:
+                        print(g)  # DEBUG
+                    print(s)  # DEBUG
+                    round_trip = Circuit.from_qasm(s)
+                    self.assertEqual(c.qubits, round_trip.qubits)
+                    self.assertListEqual(c.gates, round_trip.gates)
 
         # Test standard gates common to both OpenQASM 2 and 3.
         compare_gate_matrix_with_qiskit(
