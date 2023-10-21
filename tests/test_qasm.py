@@ -274,6 +274,11 @@ class TestQASM(unittest.TestCase):
                     # self.assertEqual(c.qubits, c1.qubits)
                     # self.assertListEquals(c.gates, c1.gates)
 
+                    # s = c.to_qasm(qasm_version)
+                    # print(s)
+                    # c1 = Circuit.from_qasm(s)
+                    # self.assertEqual(c.qubits, c1.qubits)
+                    # self.assertListEqual(c.gates, c1.gates)
                     # Check internal round-trip (pyzx to qasm to pyzx) results in the same circuit.
                     qasm_from_pyzx = pyzx_circuit.to_qasm(qasm_version)
                     pyzx_round_trip = Circuit.from_qasm(qasm_from_pyzx)
