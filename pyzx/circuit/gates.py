@@ -156,7 +156,7 @@ class Gate(object):
             if hasattr(self, "phase"):
                 attribs.append("phase={!s}".format(self.phase))
             elif hasattr(self, "phases"):
-                attribs.append("phases={}".format(",".join("{!s}".format(p) for p in self.phases)))
+                attribs.append("phases={}".format(",".join(str(p) for p in self.phases)))
         return "{}{}({})".format(
                         self.name,
                         ("*" if (hasattr(self,"adjoint") and self.adjoint) else ""),
