@@ -178,7 +178,7 @@ class TestQASM(unittest.TestCase):
                     s = c.to_qasm()
                     c1 = Circuit.from_qasm(s)
                     self.assertEqual(c.qubits, c1.qubits)
-                    self.assertListEquals(c.gates, c1.gates)
+                    self.assertListEqual(c.gates, c1.gates)
 
         # Test standard gates common to both OpenQASM 2 and 3.
         compare_gate_matrix_with_qiskit(

@@ -391,6 +391,10 @@ class Circuit(object):
 
     def to_qasm(self) -> str:
         """Produces a QASM description of the circuit."""
+        # if version == 3:
+        #     s = """OPENQASM 3;\ninclude "stdgates.inc";\n"""
+        #     s += "qubit[{!s}] q;\n".format(self.qubits)
+        # else:
         s = """OPENQASM 2.0;\ninclude "qelib1.inc";\n"""
         s += "qreg q[{!s}];\n".format(self.qubits)
         for g in self.gates:
