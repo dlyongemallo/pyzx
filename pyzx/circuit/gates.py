@@ -255,7 +255,7 @@ class Gate(object):
             if hasattr(self, "phase"):
                 param = "({}*pi)".format(float(self.phase))
             elif hasattr(self, "phases"):
-                param = "({})".format(",".join(f"{float(p)}*pi" for p in self.phases))
+                param = "({})".format(",".join("{}*pi".format(float(p)) for p in self.phases))
         return "{}{} {};".format(n, param, ", ".join(args))
 
     def to_qc(self) -> str:
