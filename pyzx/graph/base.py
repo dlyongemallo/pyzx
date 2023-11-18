@@ -90,6 +90,7 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
         # merge_vdata(v0,v1) is an optional, custom function for merging
         # vdata of v1 into v0 during spider fusion etc.
         self.merge_vdata: Optional[Callable[[VT,VT], None]] = None
+        self.variable_types: Dict[str,bool] = dict() # mapping of variable names to their type (bool or continuous)
 
     def __str__(self) -> str:
         return "Graph({} vertices, {} edges)".format(
@@ -285,7 +286,8 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
                 w = self.add_vertex(other.type(v),
                         phase=other.phase(v),
                         qubit=other.qubit(v),
-                        row=offset + other.row(v))
+                        row=offset + other.row(v),
+                        ground=other.is_ground(v))
                 if v in other._vdata: self._vdata[w] = other._vdata[v]
                 vtab[v] = w
         for e in other.edges():
@@ -361,11 +363,12 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
         rs = other.rows()
         qs = other.qubits()
         phase = other.phases()
+        grounds = other.grounds()
 
         vert_map = dict()
         edges = []
         for v in other.vertices():
-            w = self.add_vertex(ty[v],qs[v],rs[v],phase[v])
+            w = self.add_vertex(ty[v],qs[v],rs[v],phase[v],v in grounds)
             vert_map[v] = w
         for e in other.edges():
             s,t = other.edge_st(e)
@@ -382,12 +385,13 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
         rs = self.rows()
         qs = self.qubits()
         phase = self.phases()
+        grounds = self.grounds()
 
         edges = [self.edge(v,w) for v in verts for w in verts if self.connected(v,w)]
 
         vert_map = dict()
         for v in verts:
-            w = g.add_vertex(ty[v],qs[v],rs[v],phase[v])
+            w = g.add_vertex(ty[v],qs[v],rs[v],phase[v],v in grounds)
             vert_map[v] = w
         for e in edges:
             s,t = self.edge_st(e)
