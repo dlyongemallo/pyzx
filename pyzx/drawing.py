@@ -14,10 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__all__ = ['draw', 'draw_many', 'pack_circuit_nf']
-=======
-__all__ = ['draw', 'arrange_scalar_diagram', 'draw_matplotlib', 'draw_d3', 
-            'matrix_to_latex', 'print_matrix', 'graphs_to_gif']
+__all__ = ['draw', 'draw_many', 'arrange_scalar_diagram', 'draw_matplotlib', 'draw_d3', 
+            'matrix_to_latex', 'print_matrix', 'graphs_to_gif', 'pack_circuit_nf']
 
 import os
 import math
