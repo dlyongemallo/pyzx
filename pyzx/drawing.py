@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+__all__ = ['draw', 'draw_many', 'pack_circuit_nf']
+=======
 __all__ = ['draw', 'arrange_scalar_diagram', 'draw_matplotlib', 'draw_d3', 
             'matrix_to_latex', 'print_matrix', 'graphs_to_gif']
 
@@ -116,6 +118,29 @@ def pack_circuit_nf(g: BaseGraph[VT,ET], nf:Literal['grg','gslc'] ='grg') -> Non
     else:
         raise ValueError("Unknown normal form: " + str(nf))
 
+def circuit_layout(g,keys = ('r','q')):
+    return {v:(g.row(v),-g.qubit(v)) for v in g.vertices()}
+
+def draw_many(circ_list, whichpyzx=None):
+    if whichpyzx is None:
+        whichpyzx = range(len(circ_list))
+    if len(whichpyzx) == 1:
+        fig = draw(circ_list[whichpyzx[0]])
+    else:
+        fig, axs = plt.subplots(len(whichpyzx), 1)
+        for i in range(len(whichpyzx)):
+            draw(circ_list[whichpyzx[i]], None, False, (8,2), 'blue', None, axs[i])
+    return fig
+
+def draw(g, layout=None, labels=False, figsize=(8,2), h_edge_draw='blue', rows=None, ax=None):
+    if not isinstance(g, BaseGraph):
+        g = g.to_graph()
+    if ax is None:
+        fig1 = plt.figure(figsize=figsize)
+        ax = fig1.add_axes([0, 0, 1, 1], frameon=False)
+    else:
+        fig1 = None
+        
 def arrange_scalar_diagram(g: BaseGraph[VT,ET]) -> None:
     g.normalize()
     rs = g.rows()
@@ -240,6 +265,16 @@ def draw_matplotlib(
         p = layout[v]
         t = g.type(v)
         a = g.phase(v)
+        
+        sz = 0.2
+        col = 'black'
+        if t == 1: col = 'green'
+        elif t == 2: col = 'red'
+        else: sz = 0.1
+            
+        ax.add_patch(patches.Circle(p, sz, facecolor=col, edgecolor='black', zorder=1))
+        if labels: ax.text(p[0]+0.25, p[1]+0.25, str(v), ha='center', color='gray', fontsize=8)
+        if a: ax.text(p[0], p[1]-0.5, phase_to_s(a), ha='center', color='blue', fontsize=12)
         a_offset = 0.5
         phase_str = phase_to_s(a, t)
 
