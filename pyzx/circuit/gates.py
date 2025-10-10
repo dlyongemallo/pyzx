@@ -22,7 +22,7 @@ quantum gates for use in the Circuit class.
 import copy
 import math
 from fractions import Fraction
-from typing import Dict, List, Optional, Type, ClassVar, TypeVar, Generic, Set
+from typing import Dict, List, Optional, Type, ClassVar, TypeVar, Generic, Set, Sequence
 
 from ..utils import EdgeType, VertexType, FractionLike
 from ..graph.base import BaseGraph, VT, ET
@@ -1340,6 +1340,54 @@ class Barrier(Gate):
         # Barrier is a compiler directive - no operation needed on graph
         pass
 
+class OpaqueGate(Gate):
+    """Opaque gate declaration (from OpenQASM 2.0)
+
+    Represents gates with physical implementation but no mathematical definition.
+    These gates cannot be optimized or rewritten by PyZX, but are preserved
+    during circuit I/O for compatibility.
+
+    Syntax: opaque gate_name(parameters) quantumarguments;
+    """
+    name = 'OpaqueGate'
+
+    def __init__(self, gate_name: str, params: Sequence[FractionLike], qubits: List[int]):
+        """Initialize opaque gate.
+
+        Args:
+            gate_name: The name of the opaque gate
+            params: Sequence of parameters (may be empty)
+            qubits: List of qubit indices the gate operates on
+        """
+        self.gate_name = gate_name
+        self.params = list(params)  # Store as list internally
+        self.qubits = qubits
+        self.target = qubits[0] if qubits else 0
+
+    def __str__(self) -> str:
+        param_str = "({})".format(",".join(str(p) for p in self.params)) if self.params else ""
+        qubit_str = ",".join(str(q) for q in self.qubits)
+        return "{}[{}]{}({})".format(self.name, self.gate_name, param_str, qubit_str)
+
+    def _max_target(self) -> int:
+        return max(self.qubits) if self.qubits else 0
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.qubits = [mask[q] for q in g.qubits]
+        if g.qubits:
+            g.target = mask[g.target]
+        return g
+
+    def to_basic_gates(self):
+        # Opaque gates cannot be decomposed - return self as placeholder
+        return [self]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        # Opaque gates are treated as black boxes
+        # We don't add any vertices or edges, just pass through
+        pass
+
 class RCCX(Gate):
     """Relative-phase controlled-controlled-X gate (from OpenQASM 2 qelib1.inc)"""
     name = 'RCCX'
@@ -1704,6 +1752,7 @@ gate_types: Dict[str,Type[Gate]] = {
     "C4X": C4X,
     "Id": Id,
     "Barrier": Barrier,
+    "OpaqueGate": OpaqueGate,
     "FSim": FSim,
     "InitAncilla": InitAncilla,
     "PostSelect": PostSelect,

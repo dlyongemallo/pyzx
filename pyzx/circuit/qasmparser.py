@@ -32,6 +32,7 @@ class QASMParser(object):
         self.qasm_version:int = settings.default_qasm_version
         self.gates: List[Gate] = []
         self.custom_gates: Dict[str,Circuit] = {}
+        self.opaque_gates: Dict[str,Dict[str,int]] = {}
         self.registers: Dict[str,Tuple[int,int]] = {}
         self.qubit_count: int = 0
         self.circuit: Optional[Circuit] = None
@@ -39,6 +40,7 @@ class QASMParser(object):
     def parse(self, s: str, strict:bool=True) -> Circuit:
         self.gates = []
         self.custom_gates = {}
+        self.opaque_gates = {}
         self.registers = {}
         self.qubit_count = 0
         self.circuit = None
@@ -65,10 +67,23 @@ class QASMParser(object):
             raise TypeError("File is not importing standard library")
 
         data = "\n".join(r)
+        # Strip opaque gate declarations from the normal commands
+        while True:
+            # Use regex to find "opaque " as a keyword (at start or after whitespace)
+            match = re.search(r'(?:^|\s)(opaque\s)', data)
+            if not match: break
+            i = match.start() + (0 if match.start() == 0 else 1)  # Skip leading whitespace if any
+            j = data.find(";", i)
+            if j == -1:
+                raise TypeError("Opaque declaration without semicolon")
+            self.parse_opaque_gate(data[i:j+1])
+            data = data[:i] + data[j+1:]
         # Strip the custom command definitions from the normal commands
         while True:
-            i = data.find("gate ")
-            if i == -1: break
+            # Use regex to find "gate " as a keyword (at start or after whitespace)
+            match = re.search(r'(?:^|\s)(gate\s)', data)
+            if not match: break
+            i = match.start() + (0 if match.start() == 0 else 1)  # Skip leading whitespace if any
             j = data.find("}", i)
             self.parse_custom_gate(data[i:j+1])
             data = data[:i] + data[j+1:]
@@ -117,6 +132,48 @@ class QASMParser(object):
                 circ.add_gate(g)
         self.custom_gates[name] = circ
 
+    def parse_opaque_gate(self, data: str) -> None:
+        """Parse an opaque gate declaration.
+
+        Syntax: opaque gate_name(parameters) quantumarguments;
+        Example: opaque my_gate(p1, p2) q1, q2;
+
+        Opaque gates have physical implementation but no mathematical definition.
+        They are stored and passed through but cannot be optimized.
+        """
+        data = data[7:].strip()  # Remove "opaque " prefix
+        if data.endswith(';'):
+            data = data[:-1].strip()
+
+        # Extract parameters if present
+        param_names = []
+        if "(" in data:
+            i = data.find("(")
+            j = data.find(")")
+            if i == -1 or j == -1:
+                raise TypeError("Mismatched parentheses in opaque declaration: {}".format(data))
+            param_str = data[i+1:j].strip()
+            if param_str:
+                param_names = [p.strip() for p in param_str.split(",")]
+            gate_name = data[:i].strip()
+            rest = data[j+1:].strip()
+        else:
+            # No parameters
+            parts = data.split(" ", 1)
+            if len(parts) != 2:
+                raise TypeError("Invalid opaque gate declaration: {}".format(data))
+            gate_name = parts[0].strip()
+            rest = parts[1].strip()
+
+        # Extract quantum argument names
+        qarg_names = [q.strip() for q in rest.split(",")]
+
+        # Store the opaque gate signature
+        self.opaque_gates[gate_name] = {
+            'param_count': len(param_names),
+            'qubit_count': len(qarg_names)
+        }
+
     def extract_command_parts(self, c: str) -> Tuple[str,List[Fraction],List[str]]:
         if self.qasm_version == 3:
             # Convert some OpenQASM 3 commands into OpenQASM 2 format.
@@ -155,7 +212,7 @@ class QASMParser(object):
             gate = Measurement(target_qbit, result_register)
             gates.append(gate)
             return gates
-        if name in ("opaque", "if"):
+        if name == "if":
             raise TypeError("Unsupported operation {}".format(c))
         if name == "qreg":
             regname, sizep = args[0].split("[",1)
@@ -271,6 +328,18 @@ class QASMParser(object):
             elif name == 'cu':
                 if len(phases) != 4: raise TypeError("Invalid specification {}".format(c))
                 g = qasm_gate_table[name](control=argset[0],target=argset[1],theta=phases[0],phi=phases[1],rho=phases[2],gamma=phases[3])  # type: ignore
+                gates.append(g)
+            elif name in self.opaque_gates:
+                # Handle opaque gate calls
+                from .gates import OpaqueGate
+                sig = self.opaque_gates[name]
+                if len(phases) != sig['param_count']:
+                    raise TypeError("Opaque gate {} expects {} parameters, got {}".format(
+                        name, sig['param_count'], len(phases)))
+                if len(argset) != sig['qubit_count']:
+                    raise TypeError("Opaque gate {} expects {} qubits, got {}".format(
+                        name, sig['qubit_count'], len(argset)))
+                g = OpaqueGate(name, phases, argset)
                 gates.append(g)
             else:
                 raise TypeError("Invalid specification: {}".format(c))

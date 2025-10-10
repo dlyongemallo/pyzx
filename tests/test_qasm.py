@@ -489,6 +489,78 @@ class TestQASM(unittest.TestCase):
         # Barrier applied to all qubits in register
         self.assertEqual(len(range_barrier_circuit.gates[1].targets), 3)
 
+    def test_opaque_gates(self):
+        """Test opaque gate declarations and calls from OpenQASM 2.0."""
+        # Test opaque gate with parameters
+        opaque_with_params = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        opaque my_gate(p1, p2) q1, q2;
+        qreg q[2];
+        my_gate(pi/2, pi/4) q[0], q[1];
+        """)
+        self.assertEqual(opaque_with_params.qubits, 2)
+        self.assertEqual(len(opaque_with_params.gates), 1)
+        self.assertEqual(opaque_with_params.gates[0].name, "OpaqueGate")
+        self.assertEqual(opaque_with_params.gates[0].gate_name, "my_gate")
+        self.assertEqual(len(opaque_with_params.gates[0].params), 2)
+        self.assertEqual(len(opaque_with_params.gates[0].qubits), 2)
+
+        # Test opaque gate without parameters
+        opaque_no_params = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        opaque simple_gate q1;
+        qreg q[1];
+        simple_gate q[0];
+        """)
+        self.assertEqual(opaque_no_params.qubits, 1)
+        self.assertEqual(len(opaque_no_params.gates), 1)
+        self.assertEqual(opaque_no_params.gates[0].gate_name, "simple_gate")
+        self.assertEqual(len(opaque_no_params.gates[0].params), 0)
+        self.assertEqual(len(opaque_no_params.gates[0].qubits), 1)
+
+        # Test multiple opaque gates
+        multiple_opaque = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        opaque gate1 q1;
+        opaque gate2(p) q1, q2;
+        qreg q[3];
+        gate1 q[0];
+        gate2(pi) q[1], q[2];
+        """)
+        self.assertEqual(multiple_opaque.qubits, 3)
+        self.assertEqual(len(multiple_opaque.gates), 2)
+        self.assertEqual(multiple_opaque.gates[0].gate_name, "gate1")
+        self.assertEqual(multiple_opaque.gates[1].gate_name, "gate2")
+
+        # Test opaque gates decompose to themselves (black box)
+        self.assertEqual(len(opaque_no_params.gates[0].to_basic_gates()), 1)
+        self.assertEqual(opaque_no_params.gates[0].to_basic_gates()[0], opaque_no_params.gates[0])
+
+        # Test error handling: wrong number of parameters
+        with self.assertRaises(TypeError) as context:
+            Circuit.from_qasm("""
+            OPENQASM 2.0;
+            include "qelib1.inc";
+            opaque test_gate(p1, p2) q1;
+            qreg q[1];
+            test_gate(pi) q[0];
+            """)
+        self.assertTrue("expects 2 parameters" in str(context.exception))
+
+        # Test error handling: wrong number of qubits
+        with self.assertRaises(TypeError) as context:
+            Circuit.from_qasm("""
+            OPENQASM 2.0;
+            include "qelib1.inc";
+            opaque test_gate q1, q2;
+            qreg q[3];
+            test_gate q[0];
+            """)
+        self.assertTrue("expects 2 qubits" in str(context.exception))
+
     @unittest.skipUnless(QuantumCircuit, "qiskit needs to be installed for this test")
     def test_qiskit_transpile_pyzx_optimization_round_trip(self):
         """Regression test for issue #102.
