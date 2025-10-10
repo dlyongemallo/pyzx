@@ -247,6 +247,66 @@ class QASMParser(object):
                 gates.append(g)
             return gates
 
+        # Handle reset specially since it doesn't follow the iteration pattern
+        if name == 'reset':
+            if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
+            if len(args) == 0:
+                raise TypeError("Reset requires at least one qubit argument: {}".format(c))
+            # Collect all qubit indices to be reset
+            target_qubits = []
+            for a in args:
+                if "[" in a:
+                    regname, valp = a.split("[",1)
+                    val = int(valp[:-1])
+                    if regname not in registers:
+                        raise TypeError("Invalid register {}".format(regname))
+                    target_qubits.append(registers[regname][0]+val)
+                else:
+                    # Whole register
+                    if a not in registers:
+                        raise TypeError("Invalid register {}".format(a))
+                    s, size = registers[a]
+                    target_qubits.extend(list(range(s, s + size)))
+            g = qasm_gate_table[name](*target_qubits)  # type: ignore
+            gates.append(g)
+            return gates
+
+        # Handle delay specially - it has unique syntax: delay[duration] qubits;
+        if name.startswith('delay['):
+            # Extract duration from name
+            if ']' not in name:
+                raise TypeError("Invalid delay specification - missing ]: {}".format(c))
+            duration_str = name[6:name.find(']')]  # Extract text between 'delay[' and ']'
+
+            # Parse duration
+            duration, unit = self.parse_duration(duration_str)
+
+            if len(phases) != 0: raise TypeError("Delay does not take phase parameters: {}".format(c))
+            if len(args) == 0:
+                raise TypeError("Delay requires at least one qubit argument: {}".format(c))
+
+            # Collect all qubit indices for the delay
+            target_qubits = []
+            for a in args:
+                if "[" in a:
+                    regname, valp = a.split("[",1)
+                    val = int(valp[:-1])
+                    if regname not in registers:
+                        raise TypeError("Invalid register {}".format(regname))
+                    target_qubits.append(registers[regname][0]+val)
+                else:
+                    # Whole register
+                    if a not in registers:
+                        raise TypeError("Invalid register {}".format(a))
+                    s, size = registers[a]
+                    target_qubits.extend(list(range(s, s + size)))
+
+            # Create Delay gate
+            from .gates import Delay
+            g = Delay(duration, unit, *target_qubits)
+            gates.append(g)
+            return gates
+
         qubit_values = []
         is_range = False
         dim = 1
@@ -369,6 +429,40 @@ class QASMParser(object):
             except: raise TypeError("Invalid specification {}".format(val))
         phase = Fraction(phase).limit_denominator(100000000)
         return phase
+
+    def parse_duration(self, duration_str: str) -> Tuple[float, str]:
+        """Parse a duration string into value and unit.
+
+        Args:
+            duration_str: Duration string like "200ns", "800dt", "1.5us"
+
+        Returns:
+            Tuple of (duration_value, unit)
+
+        Raises:
+            TypeError: If duration format is invalid
+        """
+        duration_str = duration_str.strip()
+
+        # Match numeric part (integer or float) and unit part
+        # Support: ns, us, µs, ms, s, dt
+        match = re.match(r'^([+-]?(?:\d+\.?\d*|\d*\.\d+))([a-zµ]+)$', duration_str)
+        if not match:
+            raise TypeError("Invalid duration format: {}".format(duration_str))
+
+        value_str, unit = match.groups()
+        try:
+            duration = float(value_str)
+        except ValueError:
+            raise TypeError("Invalid duration value: {}".format(value_str))
+
+        # Validate and normalize unit
+        valid_units = {'ns', 'us', 'µs', 'ms', 's', 'dt'}
+        if unit not in valid_units:
+            raise TypeError("Invalid duration unit '{}'. Must be one of: {}".format(
+                unit, ', '.join(sorted(valid_units))))
+
+        return (duration, unit)
 
 
 def qasm(s: str) -> Circuit:

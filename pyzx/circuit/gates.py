@@ -1256,6 +1256,144 @@ class Measurement(Gate):
             g.add_edge((v,u), EdgeType.SIMPLE)
             c_mapper.set_next_row(self.result_bit, r+1)
 
+class Reset(Gate):
+    """Reset operation (from OpenQASM 3)
+
+    Resets qubit(s) to the |0⟩ state. This is a non-unitary operation
+    that discards the current state and reinitializes to ground state.
+
+    Syntax: reset q[0]; or reset q;
+    """
+    name = 'Reset'
+    qasm_name = 'reset'
+
+    def __init__(self, *targets: int) -> None:
+        """Initialize reset operation.
+
+        Args:
+            *targets: Qubit indices to reset. Can be single qubit or multiple qubits.
+        """
+        self.targets = targets
+        # For compatibility with other gates, set target to first target
+        self.target = targets[0] if targets else 0
+
+    def __str__(self) -> str:
+        if len(self.targets) == 1:
+            return "{}({})".format(self.name, self.targets[0])
+        else:
+            return "{}({})".format(self.name, ",".join(str(t) for t in self.targets))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Reset): return False
+        if self.index != other.index: return False
+        if set(self.targets) != set(other.targets): return False
+        return True
+
+    def _max_target(self) -> int:
+        return max(self.targets) if self.targets else 0
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.targets = tuple(mask[t] for t in g.targets)
+        if g.targets:
+            g.target = mask[g.target]
+        return g
+
+    def to_basic_gates(self):
+        # Reset is a non-unitary operation, cannot be decomposed
+        return [self]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        # Reset operation: discard current state and reinitialize to |0⟩
+        # In ZX-calculus, this is represented by grounding the qubit
+        for target in self.targets:
+            r = q_mapper.next_row(target)
+            # Add a grounded Z vertex (represents |0⟩ state)
+            v = self.graph_add_node(g,
+                q_mapper,
+                VertexType.Z,
+                target,
+                r,
+                ground=True)
+            # Add an X vertex to represent the new starting point
+            u = g.add_vertex(VertexType.Z, q_mapper.to_qubit(target), r+1)
+            q_mapper.set_prev_vertex(target, u)
+            q_mapper.set_next_row(target, r+2)
+
+    def to_qasm(self) -> str:
+        if len(self.targets) == 1:
+            return "reset q[{:d}];".format(self.targets[0])
+        else:
+            return "reset " + ", ".join("q[{:d}]".format(t) for t in self.targets) + ";"
+
+class Delay(Gate):
+    """Delay operation (from OpenQASM 3)
+
+    Provides explicit timing control and prevents gate commutation.
+    Multi-qubit delays act as synchronization points.
+
+    Syntax: delay[duration] q[0]; or delay[200ns] q[0:3];
+    Duration units: ns (nanoseconds), us/µs (microseconds), ms (milliseconds), s (seconds), dt (samples)
+
+    Note: Stretch types are not yet supported.
+    """
+    name = 'Delay'
+    qasm_name = 'delay'
+
+    def __init__(self, duration: float, unit: str, *targets: int) -> None:
+        """Initialize delay operation.
+
+        Args:
+            duration: Numeric duration value
+            unit: Time unit ('ns', 'us', 'µs', 'ms', 's', 'dt')
+            *targets: Qubit indices to apply delay to
+        """
+        self.duration = duration
+        self.unit = unit
+        self.targets = targets
+        # For compatibility with other gates, set target to first target
+        self.target = targets[0] if targets else 0
+
+    def __str__(self) -> str:
+        duration_str = "{}{}".format(self.duration, self.unit)
+        if len(self.targets) == 1:
+            return "{}[{}]({})".format(self.name, duration_str, self.targets[0])
+        else:
+            return "{}[{}]({})".format(self.name, duration_str, ",".join(str(t) for t in self.targets))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Delay): return False
+        if self.index != other.index: return False
+        if self.duration != other.duration or self.unit != other.unit: return False
+        if set(self.targets) != set(other.targets): return False
+        return True
+
+    def _max_target(self) -> int:
+        return max(self.targets) if self.targets else 0
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.targets = tuple(mask[t] for t in g.targets)
+        if g.targets:
+            g.target = mask[g.target]
+        return g
+
+    def to_basic_gates(self):
+        # Delay is a timing directive, cannot be decomposed
+        return [self]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        # Delay is a timing directive - no operation on graph
+        # It's preserved for circuit I/O but doesn't affect ZX-calculus representation
+        pass
+
+    def to_qasm(self) -> str:
+        duration_str = "{}{}".format(self.duration, self.unit)
+        if len(self.targets) == 1:
+            return "delay[{}] q[{:d}];".format(duration_str, self.targets[0])
+        else:
+            return "delay[{}] ".format(duration_str) + ", ".join("q[{:d}]".format(t) for t in self.targets) + ";"
+
 class U0(Gate):
     """Identity gate with duration parameter (from OpenQASM 2 qelib1.inc)"""
     name = 'U0'
@@ -1758,6 +1896,8 @@ gate_types: Dict[str,Type[Gate]] = {
     "PostSelect": PostSelect,
     "DiscardBit": DiscardBit,
     "Measurement": Measurement,
+    "Reset": Reset,
+    "Delay": Delay,
 }
 
 qasm_gate_table: Dict[str, Type[Gate]] = {
@@ -1809,4 +1949,6 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "swap": SWAP,
     "cswap": CSWAP,
     "measure": Measurement,
+    "reset": Reset,
+    "delay": Delay,
 }

@@ -561,6 +561,237 @@ class TestQASM(unittest.TestCase):
             """)
         self.assertTrue("expects 2 qubits" in str(context.exception))
 
+    def test_reset_operation(self):
+        """Test reset operation from OpenQASM 3."""
+        # Test single qubit reset
+        reset_single = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[3] q;
+        h q[0];
+        reset q[0];
+        cx q[0], q[1];
+        """)
+        self.assertEqual(reset_single.qubits, 3)
+        self.assertEqual(len(reset_single.gates), 3)
+        self.assertEqual(reset_single.gates[1].name, "Reset")
+        self.assertEqual(len(reset_single.gates[1].targets), 1)
+        self.assertEqual(reset_single.gates[1].targets[0], 0)
+
+        # Test register reset
+        reset_register = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[3] q;
+        h q[0];
+        cx q[0], q[1];
+        reset q;
+        """)
+        self.assertEqual(reset_register.qubits, 3)
+        self.assertEqual(len(reset_register.gates), 3)
+        self.assertEqual(reset_register.gates[2].name, "Reset")
+        self.assertEqual(len(reset_register.gates[2].targets), 3)
+        self.assertEqual(set(reset_register.gates[2].targets), {0, 1, 2})
+
+        # Test multiple qubit reset (specific qubits)
+        reset_multiple = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[4] q;
+        h q[0];
+        reset q[1], q[2];
+        """)
+        self.assertEqual(reset_multiple.qubits, 4)
+        self.assertEqual(len(reset_multiple.gates), 2)
+        self.assertEqual(reset_multiple.gates[1].name, "Reset")
+        self.assertEqual(len(reset_multiple.gates[1].targets), 2)
+        self.assertEqual(set(reset_multiple.gates[1].targets), {1, 2})
+
+        # Test reset in OpenQASM 2
+        reset_qasm2 = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[2];
+        h q[0];
+        reset q[0];
+        """)
+        self.assertEqual(reset_qasm2.qubits, 2)
+        self.assertEqual(len(reset_qasm2.gates), 2)
+        self.assertEqual(reset_qasm2.gates[1].name, "Reset")
+
+        # Test that reset cannot be decomposed
+        self.assertEqual(len(reset_single.gates[1].to_basic_gates()), 1)
+        self.assertEqual(reset_single.gates[1].to_basic_gates()[0], reset_single.gates[1])
+
+    def test_delay_operation(self):
+        """Test delay operation from OpenQASM 3."""
+        # Test single qubit delay with nanoseconds
+        delay_ns = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[2] q;
+        h q[0];
+        delay[200ns] q[0];
+        cx q[0], q[1];
+        """)
+        self.assertEqual(delay_ns.qubits, 2)
+        self.assertEqual(len(delay_ns.gates), 3)
+        self.assertEqual(delay_ns.gates[1].name, "Delay")
+        self.assertEqual(delay_ns.gates[1].duration, 200.0)
+        self.assertEqual(delay_ns.gates[1].unit, "ns")
+        self.assertEqual(len(delay_ns.gates[1].targets), 1)
+        self.assertEqual(delay_ns.gates[1].targets[0], 0)
+
+        # Test delay with dt (device timesteps)
+        delay_dt = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[1] q;
+        delay[800dt] q[0];
+        """)
+        self.assertEqual(delay_dt.qubits, 1)
+        self.assertEqual(len(delay_dt.gates), 1)
+        self.assertEqual(delay_dt.gates[0].name, "Delay")
+        self.assertEqual(delay_dt.gates[0].duration, 800.0)
+        self.assertEqual(delay_dt.gates[0].unit, "dt")
+
+        # Test delay with microseconds (us)
+        delay_us = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[1] q;
+        delay[1.5us] q[0];
+        """)
+        self.assertEqual(delay_us.gates[0].duration, 1.5)
+        self.assertEqual(delay_us.gates[0].unit, "us")
+
+        # Test delay with microseconds (µs - unicode)
+        delay_mu = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[1] q;
+        delay[2.5µs] q[0];
+        """)
+        self.assertEqual(delay_mu.gates[0].duration, 2.5)
+        self.assertEqual(delay_mu.gates[0].unit, "µs")
+
+        # Test delay with milliseconds
+        delay_ms = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[1] q;
+        delay[10ms] q[0];
+        """)
+        self.assertEqual(delay_ms.gates[0].duration, 10.0)
+        self.assertEqual(delay_ms.gates[0].unit, "ms")
+
+        # Test delay with seconds
+        delay_s = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[1] q;
+        delay[0.5s] q[0];
+        """)
+        self.assertEqual(delay_s.gates[0].duration, 0.5)
+        self.assertEqual(delay_s.gates[0].unit, "s")
+
+        # Test multi-qubit synchronized delay
+        delay_multi = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[4] q;
+        h q[0];
+        delay[100ns] q[0], q[1], q[2];
+        cx q[0], q[3];
+        """)
+        self.assertEqual(delay_multi.qubits, 4)
+        self.assertEqual(len(delay_multi.gates), 3)
+        self.assertEqual(delay_multi.gates[1].name, "Delay")
+        self.assertEqual(delay_multi.gates[1].duration, 100.0)
+        self.assertEqual(delay_multi.gates[1].unit, "ns")
+        self.assertEqual(len(delay_multi.gates[1].targets), 3)
+        self.assertEqual(set(delay_multi.gates[1].targets), {0, 1, 2})
+
+        # Test delay on entire register
+        delay_register = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[3] q;
+        h q[0];
+        delay[50ns] q;
+        cx q[0], q[1];
+        """)
+        self.assertEqual(delay_register.qubits, 3)
+        self.assertEqual(len(delay_register.gates), 3)
+        self.assertEqual(delay_register.gates[1].name, "Delay")
+        self.assertEqual(len(delay_register.gates[1].targets), 3)
+        self.assertEqual(set(delay_register.gates[1].targets), {0, 1, 2})
+
+        # Test delay in mixed circuit with various gates
+        delay_mixed = Circuit.from_qasm("""
+        OPENQASM 3;
+        include "stdgates.inc";
+        qubit[3] q;
+        h q[0];
+        delay[100ns] q[0];
+        cx q[0], q[1];
+        delay[200ns] q[1];
+        s q[2];
+        delay[50ns] q[0], q[2];
+        """)
+        self.assertEqual(delay_mixed.qubits, 3)
+        self.assertEqual(len(delay_mixed.gates), 6)
+        self.assertEqual(delay_mixed.gates[1].name, "Delay")
+        self.assertEqual(delay_mixed.gates[3].name, "Delay")
+        self.assertEqual(delay_mixed.gates[5].name, "Delay")
+
+        # Test that delay cannot be decomposed (returns itself)
+        self.assertEqual(len(delay_ns.gates[1].to_basic_gates()), 1)
+        self.assertEqual(delay_ns.gates[1].to_basic_gates()[0], delay_ns.gates[1])
+
+        # Test round-trip: parse → to_qasm → parse
+        qasm_output = delay_ns.to_qasm(3)
+        delay_roundtrip = Circuit.from_qasm(qasm_output)
+        self.assertEqual(delay_ns.qubits, delay_roundtrip.qubits)
+        self.assertEqual(len(delay_ns.gates), len(delay_roundtrip.gates))
+        # Check that delay gate preserved its properties
+        for i, gate in enumerate(delay_ns.gates):
+            if gate.name == "Delay":
+                self.assertEqual(delay_roundtrip.gates[i].name, "Delay")
+                self.assertEqual(delay_roundtrip.gates[i].duration, gate.duration)
+                self.assertEqual(delay_roundtrip.gates[i].unit, gate.unit)
+                self.assertEqual(delay_roundtrip.gates[i].targets, gate.targets)
+
+        # Test error handling: invalid duration format
+        with self.assertRaises(TypeError) as context:
+            Circuit.from_qasm("""
+            OPENQASM 3;
+            include "stdgates.inc";
+            qubit[1] q;
+            delay[invalid] q[0];
+            """)
+        self.assertTrue("Invalid duration format" in str(context.exception))
+
+        # Test error handling: invalid unit
+        with self.assertRaises(TypeError) as context:
+            Circuit.from_qasm("""
+            OPENQASM 3;
+            include "stdgates.inc";
+            qubit[1] q;
+            delay[100xyz] q[0];
+            """)
+        self.assertTrue("Invalid duration unit" in str(context.exception))
+
+        # Test error handling: missing qubit argument
+        with self.assertRaises(TypeError) as context:
+            Circuit.from_qasm("""
+            OPENQASM 3;
+            include "stdgates.inc";
+            qubit[1] q;
+            delay[100ns];
+            """)
+        self.assertTrue("Delay requires at least one qubit" in str(context.exception))
+
     @unittest.skipUnless(QuantumCircuit, "qiskit needs to be installed for this test")
     def test_qiskit_transpile_pyzx_optimization_round_trip(self):
         """Regression test for issue #102.
