@@ -1256,6 +1256,346 @@ class Measurement(Gate):
             g.add_edge((v,u), EdgeType.SIMPLE)
             c_mapper.set_next_row(self.result_bit, r+1)
 
+class U0(Gate):
+    """Identity gate with duration parameter (from OpenQASM 2 qelib1.inc)"""
+    name = 'U0'
+    qasm_name = 'u0'
+    print_phase = True
+
+    def __init__(self, target: int, gamma: FractionLike) -> None:
+        self.target = target
+        self.gamma = gamma
+        self.phase = gamma  # For compatibility with print_phase
+
+    def to_basic_gates(self):
+        # U0 is an identity gate - returns empty list (no operation)
+        return []
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        # Identity gate - no operation needed on graph
+        pass
+
+class RCCX(Gate):
+    """Relative-phase controlled-controlled-X gate (from OpenQASM 2 qelib1.inc)"""
+    name = 'RCCX'
+    qasm_name = 'rccx'
+
+    def __init__(self, ctrl1: int, ctrl2: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.target = target
+        self.control = ctrl1  # For compatibility
+
+    def __str__(self) -> str:
+        return "{}(c1={!s},c2={!s},t={!s})".format(self.name,self.ctrl1,self.ctrl2,self.target)
+
+    def _max_target(self):
+        return max([self.target,self.ctrl1,self.ctrl2])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.control = mask[g.control]
+        return g
+
+    def to_basic_gates(self):
+        # gate rccx a,b,c {
+        #   u2(0,pi) c;
+        #   u1(pi/4) c;
+        #   cx b, c;
+        #   u1(-pi/4) c;
+        #   cx a, c;
+        #   u1(pi/4) c;
+        #   cx b, c;
+        #   u1(-pi/4) c;
+        #   u2(0,pi) c;
+        # }
+        a, b, c = self.ctrl1, self.ctrl2, self.target
+        return [
+            U2(c, 0, 1),  # u2(0,pi)
+            ZPhase(c, Fraction(1,4)),  # u1(pi/4)
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1,4)),  # u1(-pi/4)
+            CNOT(a, c),
+            ZPhase(c, Fraction(1,4)),  # u1(pi/4)
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1,4)),  # u1(-pi/4)
+            U2(c, 0, 1)  # u2(0,pi)
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+class RC3X(Gate):
+    """Relative-phase 3-controlled-X gate (from OpenQASM 2 qelib1.inc)"""
+    name = 'RC3X'
+    qasm_name = 'rc3x'
+
+    def __init__(self, ctrl1: int, ctrl2: int, ctrl3: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.ctrl3 = ctrl3
+        self.target = target
+
+    def __str__(self) -> str:
+        return "{}(c1={!s},c2={!s},c3={!s},t={!s})".format(
+            self.name,self.ctrl1,self.ctrl2,self.ctrl3,self.target)
+
+    def _max_target(self):
+        return max([self.target,self.ctrl1,self.ctrl2,self.ctrl3])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.ctrl3 = mask[g.ctrl3]
+        return g
+
+    def to_basic_gates(self):
+        # gate rc3x a,b,c,d {
+        #   u2(0,pi) d;
+        #   u1(pi/4) d;
+        #   cx c,d;
+        #   u1(-pi/4) d;
+        #   u2(0,pi) d;
+        #   cx a,d;
+        #   u1(pi/4) d;
+        #   cx b,d;
+        #   u1(-pi/4) d;
+        #   cx a,d;
+        #   u1(pi/4) d;
+        #   cx b,d;
+        #   u1(-pi/4) d;
+        #   u2(0,pi) d;
+        #   u1(pi/4) d;
+        #   cx c,d;
+        #   u1(-pi/4) d;
+        #   u2(0,pi) d;
+        # }
+        a, b, c, d = self.ctrl1, self.ctrl2, self.ctrl3, self.target
+        return [
+            U2(d, 0, 1),  # u2(0,pi)
+            ZPhase(d, Fraction(1,4)),  # u1(pi/4)
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1,4)),  # u1(-pi/4)
+            U2(d, 0, 1),  # u2(0,pi)
+            CNOT(a, d),
+            ZPhase(d, Fraction(1,4)),  # u1(pi/4)
+            CNOT(b, d),
+            ZPhase(d, Fraction(-1,4)),  # u1(-pi/4)
+            CNOT(a, d),
+            ZPhase(d, Fraction(1,4)),  # u1(pi/4)
+            CNOT(b, d),
+            ZPhase(d, Fraction(-1,4)),  # u1(-pi/4)
+            U2(d, 0, 1),  # u2(0,pi)
+            ZPhase(d, Fraction(1,4)),  # u1(pi/4)
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1,4)),  # u1(-pi/4)
+            U2(d, 0, 1)  # u2(0,pi)
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+class C3X(Gate):
+    """3-controlled-X gate (from OpenQASM 2 qelib1.inc)"""
+    name = 'C3X'
+    qasm_name = 'c3x'
+
+    def __init__(self, ctrl1: int, ctrl2: int, ctrl3: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.ctrl3 = ctrl3
+        self.target = target
+
+    def __str__(self) -> str:
+        return "{}(c1={!s},c2={!s},c3={!s},t={!s})".format(
+            self.name,self.ctrl1,self.ctrl2,self.ctrl3,self.target)
+
+    def _max_target(self):
+        return max([self.target,self.ctrl1,self.ctrl2,self.ctrl3])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.ctrl3 = mask[g.ctrl3]
+        return g
+
+    def to_basic_gates(self):
+        # The c3x gate uses a decomposition with h, p(pi/8), and cx gates
+        # Based on the standard decomposition from qelib1.inc
+        a, b, c, d = self.ctrl1, self.ctrl2, self.ctrl3, self.target
+        return [
+            HAD(d),
+            ZPhase(a, Fraction(1,8)),  # p(pi/8)
+            ZPhase(b, Fraction(1,8)),
+            ZPhase(c, Fraction(1,8)),
+            ZPhase(d, Fraction(1,8)),
+            CNOT(a, b),
+            ZPhase(b, Fraction(-1,8)),  # p(-pi/8)
+            CNOT(a, b),
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1,8)),
+            CNOT(a, c),
+            ZPhase(c, Fraction(1,8)),
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1,8)),
+            CNOT(a, c),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1,8)),
+            CNOT(b, d),
+            ZPhase(d, Fraction(1,8)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1,8)),
+            CNOT(a, d),
+            ZPhase(d, Fraction(1,8)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1,8)),
+            CNOT(b, d),
+            ZPhase(d, Fraction(1,8)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1,8)),
+            CNOT(a, d),
+            HAD(d)
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+    def tcount(self):
+        return 14  # Has 14 T gates in its decomposition
+
+class C3SQRTX(Gate):
+    """3-controlled-sqrt(X) gate (from OpenQASM 2 qelib1.inc)"""
+    name = 'C3SQRTX'
+    qasm_name = 'c3sqrtx'
+
+    def __init__(self, ctrl1: int, ctrl2: int, ctrl3: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.ctrl3 = ctrl3
+        self.target = target
+
+    def __str__(self) -> str:
+        return "{}(c1={!s},c2={!s},c3={!s},t={!s})".format(
+            self.name,self.ctrl1,self.ctrl2,self.ctrl3,self.target)
+
+    def _max_target(self):
+        return max([self.target,self.ctrl1,self.ctrl2,self.ctrl3])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.ctrl3 = mask[g.ctrl3]
+        return g
+
+    def to_basic_gates(self):
+        # Decomposition using h, cu1(±pi/8), and cx gates
+        # This is the c3sqrtx decomposition from qelib1.inc
+        a, b, c, d = self.ctrl1, self.ctrl2, self.ctrl3, self.target
+        return [
+            HAD(d),
+            CPhase(a, d, Fraction(1,8)),  # cu1(pi/8)
+            HAD(d),
+            CNOT(a, b),
+            HAD(d),
+            CPhase(b, d, Fraction(-1,8)),  # cu1(-pi/8)
+            HAD(d),
+            CNOT(a, b),
+            HAD(d),
+            CPhase(b, d, Fraction(1,8)),  # cu1(pi/8)
+            HAD(d),
+            CNOT(b, c),
+            HAD(d),
+            CPhase(c, d, Fraction(-1,8)),  # cu1(-pi/8)
+            HAD(d),
+            CNOT(a, c),
+            HAD(d),
+            CPhase(c, d, Fraction(1,8)),  # cu1(pi/8)
+            HAD(d),
+            CNOT(b, c),
+            HAD(d),
+            CPhase(c, d, Fraction(-1,8)),  # cu1(-pi/8)
+            HAD(d),
+            CNOT(a, c),
+            HAD(d),
+            CPhase(c, d, Fraction(1,8)),  # cu1(pi/8)
+            HAD(d)
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+class C4X(Gate):
+    """4-controlled-X gate (from OpenQASM 2 qelib1.inc)"""
+    name = 'C4X'
+    qasm_name = 'c4x'
+
+    def __init__(self, ctrl1: int, ctrl2: int, ctrl3: int, ctrl4: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.ctrl3 = ctrl3
+        self.ctrl4 = ctrl4
+        self.target = target
+
+    def __str__(self) -> str:
+        return "{}(c1={!s},c2={!s},c3={!s},c4={!s},t={!s})".format(
+            self.name,self.ctrl1,self.ctrl2,self.ctrl3,self.ctrl4,self.target)
+
+    def _max_target(self):
+        return max([self.target,self.ctrl1,self.ctrl2,self.ctrl3,self.ctrl4])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.ctrl3 = mask[g.ctrl3]
+        g.ctrl4 = mask[g.ctrl4]
+        return g
+
+    def to_basic_gates(self):
+        # gate c4x a,b,c,d,e {
+        #   h e;
+        #   cu1(pi/2) d,e;
+        #   h e;
+        #   c3x a,b,c,d;
+        #   h e;
+        #   cu1(-pi/2) d,e;
+        #   h e;
+        #   c3x a,b,c,d;
+        #   c3sqrtx a,b,c,e;
+        # }
+        a, b, c, d, e = self.ctrl1, self.ctrl2, self.ctrl3, self.ctrl4, self.target
+        return [
+            HAD(e),
+            CPhase(d, e, Fraction(1,2)),  # cu1(pi/2)
+            HAD(e),
+        ] + C3X(a, b, c, d).to_basic_gates() + [
+            HAD(e),
+            CPhase(d, e, Fraction(-1,2)),  # cu1(-pi/2)
+            HAD(e),
+        ] + C3X(a, b, c, d).to_basic_gates() + \
+            C3SQRTX(a, b, c, e).to_basic_gates()
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+    def tcount(self):
+        return 28  # Two c3x gates = 2*14 = 28 T gates
+
 gate_types: Dict[str,Type[Gate]] = {
     "XPhase": XPhase,
     "NOT": NOT,
@@ -1282,6 +1622,7 @@ gate_types: Dict[str,Type[Gate]] = {
     "CHAD": CHAD,
     "TOF": Tofolli,
     "CCZ": CCZ,
+    "U0": U0,
     "U2": U2,
     "U3": U3,
     "U": U3,
@@ -1291,6 +1632,11 @@ gate_types: Dict[str,Type[Gate]] = {
     "CRY": CRY,
     "RZZ": RZZ,
     "RXX": RXX,
+    "RCCX": RCCX,
+    "RC3X": RC3X,
+    "C3X": C3X,
+    "C3SQRTX": C3SQRTX,
+    "C4X": C4X,
     "FSim": FSim,
     "InitAncilla": InitAncilla,
     "PostSelect": PostSelect,
@@ -1317,6 +1663,7 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "cphase": CPhase,
     "cu1": CPhase,
     "p": ZPhase,
+    "u0": U0,
     "u1": ZPhase,
     "u2": U2,
     "u3": U3,
@@ -1336,6 +1683,11 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "rzz": RZZ,
     "ccx": Tofolli,
     "ccz": CCZ,
+    "rccx": RCCX,
+    "rc3x": RC3X,
+    "c3x": C3X,
+    "c3sqrtx": C3SQRTX,
+    "c4x": C4X,
     "swap": SWAP,
     "cswap": CSWAP,
     "measure": Measurement,
