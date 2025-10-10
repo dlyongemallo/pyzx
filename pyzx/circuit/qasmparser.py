@@ -124,6 +124,9 @@ class QASMParser(object):
             c = re.sub(r"^qubit\[(\d+)] (\w+)$", r"qreg \2[\1]", c)
             c = re.sub(r"^(\w+)\[(\d+)] = measure (\w+)\[(\d+)]$", r"measure \3[\4] -> \1[\2]", c)
         right_bracket = c.find(")")
+        # Handle commands with no arguments (like "barrier")
+        if " " not in c and right_bracket == -1:
+            return c, [], []
         name, rest = c.split(" ", 1) if right_bracket == -1\
             else [c[:right_bracket+1], c[right_bracket+1:]]
         args = [s.strip() for s in rest.split(",") if s.strip()]
@@ -140,7 +143,7 @@ class QASMParser(object):
     def parse_command(self, c: str, registers: Dict[str,Tuple[int,int]]) -> List[Gate]:
         gates: List[Gate] = []
         name, phases, args = self.extract_command_parts(c)
-        if name in ("barrier","creg", "id"): return gates
+        if name == "creg": return gates  # creg is handled elsewhere, skip it
         if name == "measure":
             target, result_bit = args[0].split(' -> ')
             # Extract the register name and index separately for both target and result
@@ -160,6 +163,33 @@ class QASMParser(object):
             registers[regname] = (self.qubit_count, size)
             self.qubit_count += size
             return gates
+        # Handle barrier specially since it doesn't follow the iteration pattern
+        if name == 'barrier':
+            if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
+            if len(args) == 0:
+                # Global barrier (no arguments)
+                g = qasm_gate_table[name]()  # type: ignore
+                gates.append(g)
+            else:
+                # Barrier on specific qubits - collect all qubit indices
+                target_qubits = []
+                for a in args:
+                    if "[" in a:
+                        regname, valp = a.split("[",1)
+                        val = int(valp[:-1])
+                        if regname not in registers:
+                            raise TypeError("Invalid register {}".format(regname))
+                        target_qubits.append(registers[regname][0]+val)
+                    else:
+                        # Whole register
+                        if a not in registers:
+                            raise TypeError("Invalid register {}".format(a))
+                        s, size = registers[a]
+                        target_qubits.extend(list(range(s, s + size)))
+                g = qasm_gate_table[name](*target_qubits)  # type: ignore
+                gates.append(g)
+            return gates
+
         qubit_values = []
         is_range = False
         dim = 1
@@ -169,7 +199,7 @@ class QASMParser(object):
                 regname, valp = a.split("[",1)
                 # Remove the trailing ']' before converting to int
                 val = int(valp[:-1])
-                if regname not in registers: 
+                if regname not in registers:
                     raise TypeError("Invalid register {}".format(regname))
                 qubit_values.append([registers[regname][0]+val])
             else:
@@ -193,7 +223,7 @@ class QASMParser(object):
                     raise TypeError("Argument amount does not match gate spec: {}".format(c))
                 for g in circ.gates:
                     gates.append(g.reposition(argset))
-            elif name in ('x', 'y', 'z', 's', 't', 'h', 'sx'):
+            elif name in ('x', 'y', 'z', 's', 't', 'h', 'sx', 'id'):
                 if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
                 g = qasm_gate_table[name](argset[0])  # type: ignore # mypy can't handle Gate subclasses with different number of parameters
                 gates.append(g)

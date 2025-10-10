@@ -415,6 +415,80 @@ class TestQASM(unittest.TestCase):
         compare_multicontrol_gate('c3sqrtx', 4)
         compare_multicontrol_gate('c4x', 5)
 
+    def test_id_gate(self):
+        """Test id (identity) gate from OpenQASM 2 qelib1.inc library."""
+        # Test single id gate
+        id_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[1];
+        id q[0];
+        """)
+        self.assertEqual(id_circuit.qubits, 1)
+        self.assertEqual(len(id_circuit.gates), 1)
+        self.assertEqual(id_circuit.gates[0].name, "Id")
+        # id gate decomposes to identity (empty list)
+        self.assertEqual(len(id_circuit.gates[0].to_basic_gates()), 0)
+
+        # Test id gate in a circuit with other gates
+        mixed_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[2];
+        h q[0];
+        id q[1];
+        cx q[0], q[1];
+        """)
+        self.assertEqual(mixed_circuit.qubits, 2)
+        self.assertEqual(len(mixed_circuit.gates), 3)
+        self.assertEqual(mixed_circuit.gates[1].name, "Id")
+
+    def test_barrier_directive(self):
+        """Test barrier directive from OpenQASM 2.0."""
+        # Test barrier on specific qubits
+        barrier_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[3];
+        h q[0];
+        barrier q[0], q[1];
+        cx q[0], q[1];
+        """)
+        self.assertEqual(barrier_circuit.qubits, 3)
+        self.assertEqual(len(barrier_circuit.gates), 3)
+        self.assertEqual(barrier_circuit.gates[1].name, "Barrier")
+        self.assertEqual(len(barrier_circuit.gates[1].targets), 2)
+
+        # Test global barrier (all qubits)
+        global_barrier_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[2];
+        h q[0];
+        barrier;
+        cx q[0], q[1];
+        """)
+        self.assertEqual(global_barrier_circuit.qubits, 2)
+        self.assertEqual(len(global_barrier_circuit.gates), 3)
+        self.assertEqual(global_barrier_circuit.gates[1].name, "Barrier")
+        # Global barrier has empty targets tuple
+        self.assertEqual(len(global_barrier_circuit.gates[1].targets), 0)
+
+        # Test barrier on register range
+        range_barrier_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[3];
+        h q[0];
+        barrier q;
+        cx q[0], q[1];
+        """)
+        self.assertEqual(range_barrier_circuit.qubits, 3)
+        self.assertEqual(len(range_barrier_circuit.gates), 3)
+        self.assertEqual(range_barrier_circuit.gates[1].name, "Barrier")
+        # Barrier applied to all qubits in register
+        self.assertEqual(len(range_barrier_circuit.gates[1].targets), 3)
+
     @unittest.skipUnless(QuantumCircuit, "qiskit needs to be installed for this test")
     def test_qiskit_transpile_pyzx_optimization_round_trip(self):
         """Regression test for issue #102.

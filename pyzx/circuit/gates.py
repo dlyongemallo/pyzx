@@ -1275,6 +1275,71 @@ class U0(Gate):
         # Identity gate - no operation needed on graph
         pass
 
+class Id(Gate):
+    """Identity gate (from OpenQASM 2 qelib1.inc)
+
+    Defined as gate id a { U(0,0,0) a; }
+    An explicit no-op in idealized mathematical terms.
+    """
+    name = 'Id'
+    qasm_name = 'id'
+    qc_name = 'id'
+
+    def __init__(self, target: int) -> None:
+        self.target = target
+
+    def to_basic_gates(self):
+        # Identity gate - returns empty list (no operation)
+        return []
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        # Identity gate - no operation needed on graph
+        pass
+
+class Barrier(Gate):
+    """Barrier directive (from OpenQASM 2.0)
+
+    Prevents commutation and gate reordering on a set of qubits across its source line.
+    This is a compiler directive, not a quantum gate.
+    Can be applied to specific qubits or globally (all qubits).
+    """
+    name = 'Barrier'
+    qasm_name = 'barrier'
+
+    def __init__(self, *targets: int) -> None:
+        """Initialize barrier.
+
+        Args:
+            *targets: Qubit indices to apply barrier to. If empty, applies to all qubits.
+        """
+        self.targets = targets
+        # For compatibility with other gates, set target to first target if any
+        self.target = targets[0] if targets else 0
+
+    def __str__(self) -> str:
+        if self.targets:
+            return "{}({})".format(self.name, ",".join(str(t) for t in self.targets))
+        else:
+            return "{}(all)".format(self.name)
+
+    def _max_target(self) -> int:
+        return max(self.targets) if self.targets else 0
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        if self.targets:
+            g.targets = tuple(mask[t] for t in g.targets)
+            g.target = mask[g.target]
+        return g
+
+    def to_basic_gates(self):
+        # Barrier is a compiler directive - returns empty list
+        return []
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        # Barrier is a compiler directive - no operation needed on graph
+        pass
+
 class RCCX(Gate):
     """Relative-phase controlled-controlled-X gate (from OpenQASM 2 qelib1.inc)"""
     name = 'RCCX'
@@ -1637,6 +1702,8 @@ gate_types: Dict[str,Type[Gate]] = {
     "C3X": C3X,
     "C3SQRTX": C3SQRTX,
     "C4X": C4X,
+    "Id": Id,
+    "Barrier": Barrier,
     "FSim": FSim,
     "InitAncilla": InitAncilla,
     "PostSelect": PostSelect,
@@ -1688,6 +1755,8 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "c3x": C3X,
     "c3sqrtx": C3SQRTX,
     "c4x": C4X,
+    "id": Id,
+    "barrier": Barrier,
     "swap": SWAP,
     "cswap": CSWAP,
     "measure": Measurement,
