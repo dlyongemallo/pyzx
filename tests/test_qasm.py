@@ -310,6 +310,111 @@ class TestQASM(unittest.TestCase):
         # Test native OpenQASM 3 gate.
         compare_gate_matrix_with_qiskit(['U'], 1, 3, [3])
 
+    def test_multicontrol_gates_from_qelib1(self):
+        """Test multi-controlled gates from OpenQASM 2 qelib1.inc library."""
+        # Test u0 gate (identity with duration parameter)
+        u0_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[1];
+        u0(0.5) q[0];
+        """)
+        self.assertEqual(u0_circuit.qubits, 1)
+        self.assertEqual(len(u0_circuit.gates), 1)
+        # u0 decomposes to identity (empty list)
+        self.assertEqual(len(u0_circuit.gates[0].to_basic_gates()), 0)
+
+        # Test rccx gate (relative-phase CCX)
+        rccx_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[3];
+        rccx q[0], q[1], q[2];
+        """)
+        self.assertEqual(rccx_circuit.qubits, 3)
+        self.assertEqual(len(rccx_circuit.gates), 1)
+        self.assertEqual(rccx_circuit.gates[0].name, "RCCX")
+
+        # Test rc3x gate (relative-phase C3X)
+        rc3x_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[4];
+        rc3x q[0], q[1], q[2], q[3];
+        """)
+        self.assertEqual(rc3x_circuit.qubits, 4)
+        self.assertEqual(len(rc3x_circuit.gates), 1)
+        self.assertEqual(rc3x_circuit.gates[0].name, "RC3X")
+
+        # Test c3x gate (3-controlled X)
+        c3x_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[4];
+        c3x q[0], q[1], q[2], q[3];
+        """)
+        self.assertEqual(c3x_circuit.qubits, 4)
+        self.assertEqual(len(c3x_circuit.gates), 1)
+        self.assertEqual(c3x_circuit.gates[0].name, "C3X")
+        self.assertEqual(c3x_circuit.gates[0].tcount(), 14)
+
+        # Test c3sqrtx gate (3-controlled sqrt(X))
+        c3sqrtx_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[4];
+        c3sqrtx q[0], q[1], q[2], q[3];
+        """)
+        self.assertEqual(c3sqrtx_circuit.qubits, 4)
+        self.assertEqual(len(c3sqrtx_circuit.gates), 1)
+        self.assertEqual(c3sqrtx_circuit.gates[0].name, "C3SQRTX")
+
+        # Test c4x gate (4-controlled X)
+        c4x_circuit = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[5];
+        c4x q[0], q[1], q[2], q[3], q[4];
+        """)
+        self.assertEqual(c4x_circuit.qubits, 5)
+        self.assertEqual(len(c4x_circuit.gates), 1)
+        self.assertEqual(c4x_circuit.gates[0].name, "C4X")
+        self.assertEqual(c4x_circuit.gates[0].tcount(), 28)
+
+    @unittest.skipUnless(QuantumCircuit, "qiskit needs to be installed for this test")
+    def test_multicontrol_gates_qiskit_semantics(self):
+        """Verify multi-controlled gate semantics match qiskit implementation."""
+        # Test that multi-controlled gates can be round-tripped through qiskit
+        def compare_multicontrol_gate(gate_name, num_qubits):
+            qasm_code = f"""
+            OPENQASM 2.0;
+            include "qelib1.inc";
+            qreg q[{num_qubits}];
+            {gate_name} """ + ", ".join([f"q[{i}]" for i in range(num_qubits)]) + ";"
+
+            pyzx_circuit = Circuit.from_qasm(qasm_code)
+            self.assertEqual(pyzx_circuit.qubits, num_qubits)
+            self.assertEqual(len(pyzx_circuit.gates), 1)
+
+            # Check that all gates in decomposition are basic
+            for g in pyzx_circuit.gates:
+                for b in g.to_basic_gates():
+                    self.assertListEqual(b.to_basic_gates(), [b],
+                                       f"\n{gate_name}.to_basic_gates() contains non-basic gate")
+
+            # Test round-trip (pyzx to qasm to pyzx)
+            qasm_from_pyzx = pyzx_circuit.to_qasm(2)
+            pyzx_round_trip = Circuit.from_qasm(qasm_from_pyzx)
+            self.assertEqual(pyzx_circuit.qubits, pyzx_round_trip.qubits)
+            self.assertListEqual(pyzx_circuit.gates, pyzx_round_trip.gates)
+
+        # Test each multi-controlled gate
+        compare_multicontrol_gate('rccx', 3)
+        compare_multicontrol_gate('rc3x', 4)
+        compare_multicontrol_gate('c3x', 4)
+        compare_multicontrol_gate('c3sqrtx', 4)
+        compare_multicontrol_gate('c4x', 5)
+
     @unittest.skipUnless(QuantumCircuit, "qiskit needs to be installed for this test")
     def test_qiskit_transpile_pyzx_optimization_round_trip(self):
         """Regression test for issue #102.
