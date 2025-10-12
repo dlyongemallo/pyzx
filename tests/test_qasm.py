@@ -80,7 +80,38 @@ class TestQASM(unittest.TestCase):
         self.assertEqual(c.qubits, qasm3.qubits)
         self.assertListEqual(c.gates, qasm3.gates)
 
+    # def test_parse_qasm2_long_creg(self):
+    #     qasm2 = Circuit.from_qasm("""
+    #     OPENQASM 2.0;
+    #     include "qelib1.inc";
+    #     qreg q1[3];
+    #     creg c1[1];
+    #     creg c2[1];
+    #     h q1[1];
+    #     h q1[1];
+    #     x q1[2];
+    #     h q1[2];
+    #     id q1[2];
+    #     h q1[0];
+    #     cx q1[0], q1[2];
+    #     h q1[0];
+    #     measure q1[0] -> c2[0];
+    #     measure q1[1] -> c1[0];
+    #     """)
+    #     c = Circuit(3)
+    #     c.add_gate("HAD", 1)
+    #     c.add_gate("HAD", 1)
+    #     c.add_gate("NOT", 2)
+    #     c.add_gate("HAD", 2)
+    #     c.add_gate("HAD", 0)
+    #     c.add_gate("CNOT", 0, 2)
+    #     c.add_gate("HAD", 0)
+    #     c.add_gate("Measurement", 0)
+    #     c.add_gate("Measurement", 1)
+    #     self.assertEqual(c.qubits, qasm2.qubits)
+    #     self.assertListEqual(c.gates, qasm2.gates)
 
+    # This test still passes without the code change in #279.
     def test_parse_qasm3_long_creg(self):
         qasm3 = Circuit.from_qasm("""
         OPENQASM 3;
