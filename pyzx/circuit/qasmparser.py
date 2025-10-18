@@ -140,7 +140,7 @@ class QASMParser(object):
     def parse_command(self, c: str, registers: Dict[str,Tuple[int,int]]) -> List[Gate]:
         gates: List[Gate] = []
         name, phases, args = self.extract_command_parts(c)
-        if name in ("barrier","creg", "id"): return gates
+        if name in ("barrier","creg", "id", "u0"): return gates
         if name == "measure":
             target, result_bit = args[0].split(' -> ')
             # Extract the register name and index separately for both target and result
@@ -219,9 +219,17 @@ class QASMParser(object):
                 if len(phases) != 1: raise TypeError("Invalid specification {}".format(c))
                 g = qasm_gate_table[name](argset[0],argset[1],phase=phases[0])  # type: ignore
                 gates.append(g)
-            elif name in ('ccx', 'ccz', 'cswap'):
+            elif name in ('ccx', 'ccz', 'cswap', 'rccx'):
                 if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
                 g = qasm_gate_table[name](ctrl1=argset[0],ctrl2=argset[1],target=argset[2])  # type: ignore
+                gates.append(g)
+            elif name in ('c3x', 'rc3x', 'c3sqrtx'):
+                if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
+                g = qasm_gate_table[name](ctrl1=argset[0],ctrl2=argset[1],ctrl3=argset[2],target=argset[3])  # type: ignore
+                gates.append(g)
+            elif name == 'c4x':
+                if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
+                g = qasm_gate_table[name](ctrl1=argset[0],ctrl2=argset[1],ctrl3=argset[2],ctrl4=argset[3],target=argset[4])  # type: ignore
                 gates.append(g)
             elif name == 'cu3':
                 if len(phases) != 3: raise TypeError("Invalid specification {}".format(c))

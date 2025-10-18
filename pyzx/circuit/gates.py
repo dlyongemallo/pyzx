@@ -848,6 +848,175 @@ class RZZ(ParityPhase):
         self.targets = (control, target)
         self.phase = phase
 
+class RCCX(CCZ):
+    name = 'RCCX'
+    qasm_name = 'rccx'
+
+    def to_basic_gates(self):
+        a, b, c = self.ctrl1, self.ctrl2, self.target
+        return [
+            U2(c, 0, 1),
+            ZPhase(c, Fraction(1, 4)),
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1, 4)),
+            CNOT(a, c),
+            ZPhase(c, Fraction(1, 4)),
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1, 4)),
+            U2(c, 0, 1),
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+class C3X(Gate):
+    name = 'C3X'
+    qasm_name = 'c3x'
+
+    def __init__(self, ctrl1: int, ctrl2: int, ctrl3: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.ctrl3 = ctrl3
+        self.target = target
+
+    def _max_target(self):
+        return max([self.target, self.ctrl1, self.ctrl2, self.ctrl3])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.ctrl3 = mask[g.ctrl3]
+        return g
+
+    def to_basic_gates(self):
+        a, b, c, d = self.ctrl1, self.ctrl2, self.ctrl3, self.target
+        return [
+            HAD(d),
+            ZPhase(a, Fraction(1, 8)),
+            ZPhase(b, Fraction(1, 8)),
+            ZPhase(c, Fraction(1, 8)),
+            ZPhase(d, Fraction(1, 8)),
+            CNOT(a, b),
+            ZPhase(b, Fraction(-1, 8)),
+            CNOT(a, b),
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1, 8)),
+            CNOT(a, c),
+            ZPhase(c, Fraction(1, 8)),
+            CNOT(b, c),
+            ZPhase(c, Fraction(-1, 8)),
+            CNOT(a, c),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1, 8)),
+            CNOT(b, d),
+            ZPhase(d, Fraction(1, 8)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1, 8)),
+            CNOT(a, d),
+            ZPhase(d, Fraction(1, 8)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1, 8)),
+            CNOT(b, d),
+            ZPhase(d, Fraction(1, 8)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1, 8)),
+            CNOT(a, d),
+            HAD(d),
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+class RC3X(C3X):
+    name = 'RC3X'
+    qasm_name = 'rc3x'
+
+    def to_basic_gates(self):
+        a, b, c, d = self.ctrl1, self.ctrl2, self.ctrl3, self.target
+        return [
+            U2(d, 0, 1),
+            ZPhase(d, Fraction(1, 4)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1, 4)),
+            U2(d, 0, 1),
+            CNOT(a, d),
+            ZPhase(d, Fraction(1, 4)),
+            CNOT(b, d),
+            ZPhase(d, Fraction(-1, 4)),
+            CNOT(a, d),
+            ZPhase(d, Fraction(1, 4)),
+            CNOT(b, d),
+            ZPhase(d, Fraction(-1, 4)),
+            U2(d, 0, 1),
+            ZPhase(d, Fraction(1, 4)),
+            CNOT(c, d),
+            ZPhase(d, Fraction(-1, 4)),
+            U2(d, 0, 1),
+        ]
+
+class C3sqrtX(C3X):
+    name = 'C3sqrtX'
+    qasm_name = 'c3sqrtx'
+
+    def to_basic_gates(self):
+        a, b, c, d = self.ctrl1, self.ctrl2, self.ctrl3, self.target
+        return [
+            HAD(d), CPhase(a, d, Fraction(1, 8)), HAD(d),
+            CNOT(a, b),
+            HAD(d), CPhase(b, d, Fraction(-1, 8)), HAD(d),
+            CNOT(a, b),
+            HAD(d), CPhase(b, d, Fraction(1, 8)), HAD(d),
+            CNOT(b, c),
+            HAD(d), CPhase(c, d, Fraction(-1, 8)), HAD(d),
+            CNOT(a, c),
+            HAD(d), CPhase(c, d, Fraction(1, 8)), HAD(d),
+            CNOT(b, c),
+            HAD(d), CPhase(c, d, Fraction(-1, 8)), HAD(d),
+            CNOT(a, c),
+            HAD(d), CPhase(c, d, Fraction(1, 8)), HAD(d),
+        ]
+
+class C4X(Gate):
+    name = 'C4X'
+    qasm_name = 'c4x'
+
+    def __init__(self, ctrl1: int, ctrl2: int, ctrl3: int, ctrl4: int, target: int):
+        self.ctrl1 = ctrl1
+        self.ctrl2 = ctrl2
+        self.ctrl3 = ctrl3
+        self.ctrl4 = ctrl4
+        self.target = target
+
+    def _max_target(self):
+        return max([self.target, self.ctrl1, self.ctrl2, self.ctrl3, self.ctrl4])
+
+    def reposition(self, mask, bit_mask = None):
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrl1 = mask[g.ctrl1]
+        g.ctrl2 = mask[g.ctrl2]
+        g.ctrl3 = mask[g.ctrl3]
+        g.ctrl4 = mask[g.ctrl4]
+        return g
+
+    def to_basic_gates(self):
+        a, b, c, d, e = self.ctrl1, self.ctrl2, self.ctrl3, self.ctrl4, self.target
+        return [
+            HAD(e), CPhase(d, e, Fraction(1, 2)), HAD(e),
+            C3X(a, b, c, d),
+            HAD(e), CPhase(d, e, Fraction(-1, 2)), HAD(e),
+            C3X(a, b, c, d),
+            C3sqrtX(a, b, c, e),
+        ]
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
 
 class FSim(Gate):
     name = 'FSim'
@@ -1291,6 +1460,11 @@ gate_types: Dict[str,Type[Gate]] = {
     "CRY": CRY,
     "RZZ": RZZ,
     "RXX": RXX,
+    "RCCX": RCCX,
+    "RC3X": RC3X,
+    "C3X": C3X,
+    "C3sqrtX": C3sqrtX,
+    "C4X": C4X,
     "FSim": FSim,
     "InitAncilla": InitAncilla,
     "PostSelect": PostSelect,
@@ -1336,6 +1510,11 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "rzz": RZZ,
     "ccx": Tofolli,
     "ccz": CCZ,
+    "rccx": RCCX,
+    "rc3x": RC3X,
+    "c3x": C3X,
+    "c3sqrtx": C3sqrtX,
+    "c4x": C4X,
     "swap": SWAP,
     "cswap": CSWAP,
     "measure": Measurement,
