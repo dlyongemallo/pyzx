@@ -848,24 +848,6 @@ class RZZ(ParityPhase):
         self.targets = (control, target)
         self.phase = phase
 
-# TODO: This is a ParityPhase gate with 2 targets, maybe merge them?
-# class RZZ(Gate):
-#     name = 'RZZ'
-#     qasm_name = 'rzz'
-#     print_phase = True
-#     def __init__(self, control: int, target: int, phase: FractionLike) -> None:
-#         self.target = target
-#         self.control = control
-#         self.phase = phase
-#
-#     def to_basic_gates(self):
-#         return [CNOT(control=self.control,target=self.target),
-#                 ZPhase(self.target,phase=self.phase),
-#                 CNOT(control=self.control,target=self.target)]
-#
-#     def to_graph(self, g, q_mapper, c_mapper):
-#         for gate in self.to_basic_gates():
-#             gate.to_graph(g, q_mapper, c_mapper)
 
 class FSim(Gate):
     name = 'FSim'
