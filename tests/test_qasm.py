@@ -694,6 +694,51 @@ class TestQASM(unittest.TestCase):
             if isinstance(g1, Measurement):
                 self.assertEqual(g1.target, g2.target)
 
+    def test_measure_graph_json_round_trip(self):
+        """Test that measurement phases survive a graph JSON round-trip.
+
+        Measurement gates produce symbolic Poly phases like c[0] which
+        must be correctly serialised and deserialised by the JSON layer.
+        """
+        from pyzx.graph.jsonparser import graph_to_json, json_to_graph
+        from pyzx.symbolic import Poly
+
+        qasm = """
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[2];
+        creg c[2];
+        h q[0];
+        h q[1];
+        measure q[0] -> c[0];
+        measure q[1] -> c[1];
+        """
+        g1 = Circuit.from_qasm(qasm).to_graph()
+
+        # Collect the symbolic phases before the round-trip.
+        poly_phases_before = {
+            v: g1.phase(v) for v in g1.vertices()
+            if isinstance(g1.phase(v), Poly) and g1.phase(v) != 0
+        }
+        self.assertTrue(len(poly_phases_before) > 0,
+                        "Graph should contain at least one Poly phase")
+
+        # Round-trip through JSON.
+        g2 = json_to_graph(graph_to_json(g1))
+
+        # The round-tripped graph must have the same number of vertices,
+        # edges, and matching Poly phase strings.
+        self.assertEqual(g1.num_vertices(), g2.num_vertices())
+        self.assertEqual(g1.num_edges(), g2.num_edges())
+
+        poly_phases_after = {
+            v: g2.phase(v) for v in g2.vertices()
+            if isinstance(g2.phase(v), Poly) and g2.phase(v) != 0
+        }
+        self.assertEqual(
+            {v: str(p) for v, p in poly_phases_before.items()},
+            {v: str(p) for v, p in poly_phases_after.items()})
+
     def test_circuit_bits_from_creg(self):
         """Test that Circuit.bits reflects declared classical registers."""
         c = Circuit.from_qasm("""

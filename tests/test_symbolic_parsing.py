@@ -210,6 +210,27 @@ class TestSymbolicParsing(unittest.TestCase):
         expected = self.new_var("x") * (self.new_var("y") + self.new_var("z"))
         self.assertEqual(result, expected)
 
+    def test_subscripted_variables(self):
+        """Test that subscripted variable names like c[0] can be parsed."""
+        result = parse("c[0]", self.new_var)
+        expected = self.new_var("c[0]")
+        self.assertEqual(result, expected)
+
+        # Multiple subscripted variables.
+        result = parse("c[0] + c[1]", self.new_var)
+        expected = self.new_var("c[0]") + self.new_var("c[1]")
+        self.assertEqual(result, expected)
+
+        # Mixed plain and subscripted variables.
+        result = parse("x + c[2]", self.new_var)
+        expected = self.new_var("x") + self.new_var("c[2]")
+        self.assertEqual(result, expected)
+
+        # Coefficient with subscripted variable.
+        result = parse("3*c[0]", self.new_var)
+        expected = new_const(3) * self.new_var("c[0]")
+        self.assertEqual(result, expected)
+
     def test_complex_expressions(self):
         """Test complex mathematical expressions combining all features."""
         # Test polynomial expression

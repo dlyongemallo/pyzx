@@ -405,7 +405,7 @@ poly_grammar = Lark("""
     ?factor    : base ("^" exponent)?
     base       : intf | frac | decimal | pi | pifrac | var | "(" expr ")"
     exponent   : intf
-    var        : CNAME
+    var        : CNAME ("[" INT "]")?
     intf       : INT
     decimal    : DECIMAL
     pi         : "\\pi" | "pi" | "π"
@@ -464,6 +464,8 @@ class PolyTransformer(Transformer):
 
     def var(self, items: List[Any]) -> Poly:
         v = str(items[0])
+        if len(items) > 1 and items[1] is not None:
+            v += "[{}]".format(int(items[1]))
         return self._new_var(v)
 
     def pi(self, _: List[Any]) -> Poly:
