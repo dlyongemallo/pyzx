@@ -603,6 +603,9 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
         for (no,ni,et) in plugs:
             self.add_edge((no,vtab[ni]), edgetype=et)
         self.set_outputs(tuple(vtab[v] for v in other.outputs()))
+        for name in other.var_registry.vars():
+            self.var_registry.set_type(name, other.var_registry.get_type(name))
+        self.rebind_variables_to_registry()
 
     def tensor(self, other: BaseGraph[VT,ET]) -> BaseGraph[VT,ET]:
         """Take the tensor product of two graphs. Places the second graph below the first one.
@@ -623,6 +626,10 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
             s,t = other.edge_st(e)
             new_e = g.add_edge((vertex_map[s],vertex_map[t]),other.edge_type(e))
             g.set_edata_dict(new_e, other.edata_dict(e))
+
+        for name in other.var_registry.vars():
+            g.var_registry.set_type(name, other.var_registry.get_type(name))
+        g.rebind_variables_to_registry()
 
         inputs = g.inputs() + tuple(vertex_map[v] for v in other.inputs())
         outputs = g.outputs() + tuple(vertex_map[v] for v in other.outputs())
@@ -679,6 +686,9 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
             new_e = self.add_edge(f,other.edge_type(e))
             self.set_edata_dict(new_e, other.edata_dict(e))
             edges.append(e)
+        for name in other.var_registry.vars():
+            self.var_registry.set_type(name, other.var_registry.get_type(name))
+        self.rebind_variables_to_registry()
         return (list(vert_map.values()),edges)
 
     def subgraph_from_vertices(self,verts: List[VT]) -> BaseGraph[VT,ET]:
@@ -707,6 +717,10 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
             s,t = self.edge_st(e)
             new_e = g.add_edge((vert_map[s], vert_map[t]), self.edge_type(e))
             g.set_edata_dict(new_e, self.edata_dict(e))
+
+        for name in self.var_registry.vars():
+            g.var_registry.set_type(name, self.var_registry.get_type(name))
+        g.rebind_variables_to_registry()
 
         return g
 
