@@ -649,6 +649,79 @@ class TestQASM(unittest.TestCase):
         for g1, g2 in zip(c.gates, c2.gates):
             self.assertEqual(type(g1), type(g2))
 
+    def test_steane_encoding_stabiliser_measurement(self):
+        """Steane code X-stabiliser measurement circuit.
+
+        8 qubits (7 data + 1 ancilla), 3 classical bits, using resets and
+        measurements but no feedforward.
+
+        See diagram: https://github.com/zxcalc/pyzx/pull/403#issuecomment-3970410722
+        Code from: https://github.com/tqec/tqec/blob/steane-code-demo/examples/pyzx-steane/steane_code.qasm
+        """
+        from pyzx.circuit.gates import Measurement, Reset
+
+        qasm = """
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[8];
+        creg c[3];
+        reset q[0];
+        reset q[1];
+        reset q[2];
+        reset q[3];
+        reset q[4];
+        reset q[5];
+        reset q[6];
+        reset q[7];
+        h q[0];
+        cx q[0], q[1];
+        cx q[0], q[2];
+        cx q[0], q[3];
+        cx q[0], q[4];
+        h q[0];
+        measure q[0] -> c[0];
+        reset q[0];
+        h q[0];
+        cx q[0], q[1];
+        cx q[0], q[2];
+        cx q[0], q[5];
+        cx q[0], q[6];
+        h q[0];
+        measure q[0] -> c[1];
+        reset q[0];
+        h q[0];
+        cx q[0], q[1];
+        cx q[0], q[3];
+        cx q[0], q[5];
+        cx q[0], q[7];
+        h q[0];
+        measure q[0] -> c[2];
+        """
+
+        c = Circuit.from_qasm(qasm)
+        self.assertEqual(c.qubits, 8)
+
+        measurements = [g for g in c.gates if isinstance(g, Measurement)]
+        resets = [g for g in c.gates if isinstance(g, Reset)]
+        # 8 initial resets + 2 mid-circuit resets (between stabiliser rounds).
+        self.assertEqual(len(resets), 10)
+        self.assertEqual(len(measurements), 3)
+
+        # Convert to graph.
+        g = c.to_graph()
+        # 8 qubit inputs + 3 classical inputs = 11.
+        self.assertEqual(len(g.inputs()), 11)
+        # 7 data qubit outputs + 3 classical outputs = 10.
+        # (q[0] is consumed by the final measurement, so no output for it.)
+        self.assertEqual(len(g.outputs()), 10)
+
+        # QASM round-trip.
+        qasm_out = c.to_qasm()
+        c2 = Circuit.from_qasm(qasm_out)
+        self.assertEqual(len(c.gates), len(c2.gates))
+        for g1, g2 in zip(c.gates, c2.gates):
+            self.assertEqual(type(g1), type(g2))
+
     def test_measure_multi_register_offset(self):
         """Measure on a register that is not the first declared uses
         the correct global qubit index."""
@@ -1334,6 +1407,62 @@ class TestQASM(unittest.TestCase):
         self.assertEqual(len(c.gates), len(c2.gates))
         for g1, g2 in zip(c.gates, c2.gates):
             self.assertEqual(type(g1), type(g2))
+
+    def test_hththt_algorithmic(self):
+        """HTHTHT... with T gates at the algorithmic level.
+
+        The tqec compiler inserts injection circuitry downstream, so the QASM
+        specifies only the high-level gates.  The ZX graph should be a line of
+        alternating Hadamard edges and Z spiders, with each T gate appearing
+        as a Z(pi/4) spider.
+
+        See: https://github.com/zxcalc/pyzx/pull/403#issuecomment-3970410722
+        """
+        from fractions import Fraction
+        from pyzx.utils import VertexType, EdgeType
+
+        qasm = """
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[1];
+        h q[0];
+        t q[0];
+        h q[0];
+        t q[0];
+        h q[0];
+        t q[0];
+        """
+        c = Circuit.from_qasm(qasm)
+        self.assertEqual(c.qubits, 1)
+        self.assertEqual(len(c.gates), 6)
+
+        g = c.to_graph()
+
+        # Structure: boundary -- H -- Z(0) -- Z(pi/4) -- H -- Z(0) -- ...
+        # 2 boundaries + 3 identity Z spiders (from HAD) + 3 T spiders.
+        self.assertEqual(g.num_vertices(), 8)
+
+        boundaries = [v for v in g.vertices()
+                      if g.type(v) == VertexType.BOUNDARY]
+        z_spiders = [v for v in g.vertices()
+                     if g.type(v) == VertexType.Z]
+        self.assertEqual(len(boundaries), 2)
+        self.assertEqual(len(z_spiders), 6)
+
+        # Three of the Z spiders should carry the T-gate phase pi/4.
+        t_spiders = [v for v in z_spiders
+                     if g.phase(v) == Fraction(1, 4)]
+        self.assertEqual(len(t_spiders), 3)
+
+        # The graph should contain Hadamard edges (the H gates).
+        h_edges = [e for e in g.edges()
+                   if g.edge_type(e) == EdgeType.HADAMARD]
+        self.assertGreaterEqual(len(h_edges), 3)
+
+        # QASM round-trip.
+        qasm_out = c.to_qasm()
+        c2 = Circuit.from_qasm(qasm_out)
+        self.assertEqual(len(c.gates), len(c2.gates))
 
 
 @unittest.skipUnless(stim, "stim needs to be installed for this to run")
