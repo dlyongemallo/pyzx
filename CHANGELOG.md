@@ -8,6 +8,12 @@ Hence, occasionally changes will be backwards incompatible (although they will a
 
 ## [Unreleased]
 
+### Added
+- `pyzx.simplify.drop_orphan_reset_discards`: opt-in cleanup pass that removes the disconnected `boundary -- Z(0) -- X(_rN)` components left behind by `Circuit.to_graph(elide_initial_resets=False)` on circuits with leading resets, matching the elided graph with |0⟩ applied to those inputs (by @dlyongemallo).
+
+### Fixed
+- Reset gate representation changed from ground-based to symbolic boolean paradigm, avoiding paradigm-mixing issues that destroyed measurement phases during simplification of circuits with mid-circuit resets. As a side effect, `graph_to_circuit` now recovers conditional X-type rotations (`NOT`, `XPhase`, `SX`), since X-type vertices on the qubit wire are unambiguous now that measurement outcomes are represented as leaves. `Circuit.to_graph` gains an opt-in `elide_initial_resets` flag (default `False`) that skips the discard chain for a `Reset` on an unmodified input wire, useful for circuits with OpenQASM-style implicit |0⟩ inputs (by @dlyongemallo).
+
 ## [0.10.1] - 2026-04-28
 
 ### Added
