@@ -1300,16 +1300,19 @@ class InitAncilla(Gate):
 
 
 class Reset(Gate):
-    """Reset an existing qubit to |0⟩.
+    """Reset a qubit to the |0⟩ state.
 
     Corresponds to the OpenQASM ``reset`` instruction, which discards
     the current qubit state and unconditionally prepares ``|0⟩``.
 
-    In the ZX-diagram this is represented as a Z spider connected to
-    ground (tracing out / discarding the qubit) followed by a
-    disconnected X spider with phase 0 (state preparation ``|0⟩``).
-    This mirrors the ``DiscardBit`` pattern and models reset as a CPTP
-    map.
+    In the ZX-diagram this is represented as a Z(0) spider on the
+    qubit wire (implicit measurement) with an X(``_rN``) leaf hanging
+    off it (discarded outcome, tagged with ``outcome_type='reset_discard'``
+    in vertex data), followed by a disconnected BOUNDARY vertex (fresh
+    ``|0⟩`` preparation).  The unused boolean variable ``_rN`` gives
+    trace-out semantics: since it is never referenced elsewhere,
+    summing over its two values is equivalent to discarding the
+    measurement result.
     """
     name = 'Reset'
 
@@ -1562,7 +1565,14 @@ class Measurement(Gate):
         return g
 
     def to_graph_symbolic_boolean(self, g, q_mapper):
-        """Represent the measurement as a node with symbolic boolean phases."""
+        """Represent the measurement as a Z spider with a symbolic-phase leaf.
+
+        Places a Z(0) spider on the qubit wire and attaches the classical
+        outcome as a separate X leaf with the symbolic boolean phase.  This
+        keeps the outcome off the qubit wire so that a subsequent reset
+        traces out only the post-measurement quantum state, not the
+        classical result.
+        """
         r = q_mapper.next_row(self.target)
         if self.result_symbol is not None:
             symbol_name = self.result_symbol
@@ -1571,13 +1581,18 @@ class Measurement(Gate):
         else:
             symbol_name = "m{}".format(self.target)
         phase = new_var(name=symbol_name, is_bool=True, registry=g.var_registry)
-        _ = self.graph_add_node(g,
+        # Z(0) on the qubit wire: the measurement itself.
+        meas_v = self.graph_add_node(g,
             q_mapper,
-            VertexType.X,
+            VertexType.Z,
             self.target,
-            r,
-            phase=phase)
-        q_mapper.set_next_row(self.target, r+1)
+            r)
+        # X(phase) as a leaf: the classical outcome, branching off.
+        outcome_v = g.add_vertex(VertexType.X,
+            q_mapper.to_qubit(self.target), r + 0.5, phase)
+        g.add_edge((meas_v, outcome_v), EdgeType.SIMPLE)
+        g.set_vdata(outcome_v, 'outcome_type', 'measurement')
+        q_mapper.set_next_row(self.target, r + 1)
 
     def to_graph(self, g, q_mapper, _c_mapper):
         self.to_graph_symbolic_boolean(g, q_mapper)

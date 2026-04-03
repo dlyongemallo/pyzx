@@ -125,21 +125,37 @@ class TestReset(unittest.TestCase):
         self.assertEqual(g2.label, 5)
 
     def test_to_graph(self):
-        """Test that Reset on an existing qubit produces ground + state vertices."""
+        """Test that Reset produces Z(0) + X(_r) leaf + boundary."""
+        from pyzx.symbolic import Poly
         c = Circuit(1)
         c.add_gate(Reset(0))
         g = c.to_graph()
 
-        # Effect vertex: Z spider connected to ground (discard).
-        ground_verts = list(g.grounds())
-        self.assertEqual(len(ground_verts), 1)
-        self.assertEqual(g.type(ground_verts[0]), VertexType.Z)
-        self.assertEqual(g.phase(ground_verts[0]), 0)
+        # No ground vertices.
+        self.assertEqual(len(list(g.grounds())), 0)
 
-        # State vertex: X spider phase 0 (|0⟩ preparation).
-        x_verts = [v for v in g.vertices() if g.type(v) == VertexType.X]
-        self.assertEqual(len(x_verts), 1)
-        self.assertEqual(g.phase(x_verts[0]), 0)
+        # Implicit measurement: Z(0) spider on the wire.
+        z_spiders = [v for v in g.vertices()
+                     if g.type(v) == VertexType.Z
+                     and v not in g.inputs() and v not in g.outputs()]
+        self.assertEqual(len(z_spiders), 1)
+        self.assertEqual(g.phase(z_spiders[0]), 0)
+
+        # Discard outcome: degree-1 X leaf with symbolic phase, tagged.
+        x_leaves = [v for v in g.vertices()
+                    if g.type(v) == VertexType.X
+                    and g.vertex_degree(v) == 1
+                    and isinstance(g.phase(v), Poly)]
+        self.assertEqual(len(x_leaves), 1)
+        self.assertTrue(str(g.phase(x_leaves[0])).startswith("_r"))
+        self.assertEqual(g.vdata(x_leaves[0], 'outcome_type'), 'reset_discard')
+
+        # State vertex: boundary (fresh input for the new wire segment).
+        inner_boundaries = [v for v in g.vertices()
+                            if g.type(v) == VertexType.BOUNDARY
+                            and v not in g.inputs() and v not in g.outputs()]
+        self.assertEqual(len(inner_boundaries), 1)
+        self.assertEqual(g.phase(inner_boundaries[0]), 0)
 
 
 class TestMeasurementEquality(unittest.TestCase):

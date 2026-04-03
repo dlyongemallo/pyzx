@@ -248,6 +248,102 @@ class TestSimplify(unittest.TestCase):
         self.assertTrue(g.num_vertices() == g1.num_vertices())
         self.assertTrue(compare_tensors(g1.to_tensor(),g.to_tensor()))
 
+    def test_measurement_outcomes_survive_reduction(self):
+        """Symbolic measurement outcomes must survive full_reduce.
+
+        Regression test for tqec/tqec#528. In a circuit with mid-circuit
+        resets, the measurement outcome must be on a separate leaf off the
+        qubit wire so that the subsequent reset traces out only the
+        post-measurement quantum state, not the classical result.
+        """
+        # Steane X-stabiliser measurement circuit: 3 stabiliser rounds
+        # with mid-circuit resets after the first two measurements.
+        steane_qasm = """
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[8];
+        creg c[3];
+        h q[0];
+        cx q[0], q[1]; cx q[0], q[2]; cx q[0], q[3]; cx q[0], q[4];
+        h q[0];
+        measure q[0] -> c[0];
+        reset q[0];
+        h q[0];
+        cx q[0], q[1]; cx q[0], q[2]; cx q[0], q[5]; cx q[0], q[6];
+        h q[0];
+        measure q[0] -> c[1];
+        reset q[0];
+        h q[0];
+        cx q[0], q[1]; cx q[0], q[3]; cx q[0], q[5]; cx q[0], q[7];
+        h q[0];
+        measure q[0] -> c[2];
+        """
+        c = Circuit.from_qasm(steane_qasm)
+        g = c.to_graph()
+        full_reduce(g)
+
+        # Collect measurement-outcome vertices by phase label.
+        outcome_verts = {}
+        for v in g.vertices():
+            p = g.phase(v)
+            if isinstance(p, (int, float)):
+                continue
+            ps = str(p)
+            if ps in ('0', '1', '1/2') or ps.startswith('_r'):
+                continue
+            outcome_verts[ps] = v
+
+        self.assertEqual(sorted(outcome_verts.keys()), ['c[0]', 'c[1]', 'c[2]'],
+            "full_reduce destroyed measurement outcome phases")
+
+        # Verify stabiliser connectivity: each outcome spider should
+        # be connected (via Z neighbours) to exactly the data qubits
+        # of the corresponding Steane X-stabiliser.
+        expected_data_qubits = {
+            'c[0]': {1, 2, 3, 4},
+            'c[1]': {1, 2, 5, 6},
+            'c[2]': {1, 3, 5, 7},
+        }
+        output_qubit = {v: int(g.qubit(v)) for v in g.outputs()}
+        for label, v in outcome_verts.items():
+            data_qubits = set()
+            for n in g.neighbors(v):
+                if g.type(n) == VertexType.BOUNDARY and n in g.inputs():
+                    continue  # Ancilla input, not a data qubit.
+                # Follow through to the output boundary to find the qubit.
+                for nn in g.neighbors(n):
+                    if nn in output_qubit:
+                        data_qubits.add(output_qubit[nn])
+            self.assertEqual(data_qubits, expected_data_qubits[label],
+                f"{label} stabiliser has wrong data-qubit connectivity")
+
+    def test_measurement_outcomes_survive_single_qubit(self):
+        """Even a single-qubit measure-reset-measure must keep both outcomes.
+
+        Minimal case for the same bug as tqec/tqec#528.
+        """
+        c = Circuit.from_qasm("""
+        OPENQASM 2.0;
+        include "qelib1.inc";
+        qreg q[1];
+        creg c[2];
+        h q[0];
+        measure q[0] -> c[0];
+        reset q[0];
+        h q[0];
+        measure q[0] -> c[1];
+        """)
+        g = c.to_graph()
+        full_reduce(g)
+
+        symbolic = sorted(
+            str(g.phase(v)) for v in g.vertices()
+            if not isinstance(g.phase(v), (int, float))
+            and str(g.phase(v)) not in ('0', '1', '1/2')
+            and not str(g.phase(v)).startswith('_r')
+        )
+        self.assertEqual(symbolic, ['c[0]', 'c[1]'],
+            "full_reduce destroyed measurement outcome phases")
 
 
 qasm_1 = """OPENQASM 2.0;

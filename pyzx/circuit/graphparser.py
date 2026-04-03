@@ -41,10 +41,9 @@ def _poly_phase_to_conditional_gate(
     variables, complex coefficients, or more than one non-zero
     assignment (which would mean the phase is not a simple conditional).
 
-    This function is only called for Z-type vertices.  X-type vertices
-    are skipped because their boolean phases are ambiguous with
-    measurement outcome vertices (see the call site in
-    ``graph_to_circuit``).
+    Since measurement outcomes are now represented as degree-1 X leaves
+    (not on the qubit wire), X-type conditional gates are no longer
+    ambiguous and this function handles both Z- and X-type vertices.
     """
     from fractions import Fraction
     from ..symbolic import Var
@@ -157,12 +156,9 @@ def graph_to_circuit(g:BaseGraph[VT,ET], split_phases:bool=True) -> Circuit:
             if len(neigh) == 0:
                 # No backward neighbour: state preparation vertex.
                 qi = int(q)
-                if t == VertexType.X and phase == 0 and q in input_qubits:
-                    # Qubit already has an input boundary → mid-circuit reset.
-                    # NOTE: this heuristic assumes any disconnected X(0) spider
-                    # on an input qubit is a reset.  It could misidentify a
-                    # manually constructed graph that uses X(0) preparation on
-                    # an input qubit for a different purpose.
+                if t == VertexType.BOUNDARY and q in input_qubits:
+                    # Fresh input boundary on a qubit that already has an
+                    # input -- mid-circuit reset.
                     c.add_gate(Reset(qi))
                     continue
                 state = _reverse_state_map.get((t, phase))
@@ -180,22 +176,18 @@ def graph_to_circuit(g:BaseGraph[VT,ET], split_phases:bool=True) -> Circuit:
                 c.add_gate("HAD", q)
             if t == VertexType.BOUNDARY: #vertex is an output
                 continue
-            if g.is_ground(v):
-                # Ground vertex: discard/trace-out, part of a Reset pair.
-                # (The corresponding Reset gate is emitted when the state
-                # preparation vertex on this qubit is processed.)
-                continue
             if isinstance(phase, Poly):
-                # Only extract Z-type vertices as conditional gates.
-                # X-type vertices with boolean phases are ambiguous:
-                # measurement outcomes (from Measurement.to_graph_symbolic_boolean)
-                # produce the same X spider structure as conditional NOT/XPhase
-                # gates, so we cannot distinguish them here.  Conditional
-                # Z rotations are unambiguous because measurements never
-                # create Z spiders with boolean phases.
-                cgate = None
-                if t == VertexType.Z:
-                    cgate = _poly_phase_to_conditional_gate(phase, t, int(q))
+                # Outcome leaf: degree-1 X spider with a symbolic
+                # boolean phase, tagged via vertex data.
+                outcome_type = g.vdata(v, 'outcome_type')
+                if outcome_type == 'reset_discard':
+                    continue
+                if outcome_type == 'measurement':
+                    c.add_gate(Measurement(int(q), result_symbol=str(phase)))
+                    continue
+                # Conditional gate (both Z and X types are unambiguous
+                # now that measurement outcomes are leaves).
+                cgate = _poly_phase_to_conditional_gate(phase, t, int(q))
                 if cgate is not None:
                     c.add_gate(cgate)
                 elif phase != 0:
@@ -255,6 +247,7 @@ def circuit_to_graph(
     inputs = []
     outputs = []
     measure_targets = set()
+    reset_count = 0
 
     # Create input vertices
     for i in range(c.qubits):
@@ -285,9 +278,11 @@ def circuit_to_graph(
             q_mapper.set_prev_vertex(l, v)
             q_mapper.advance_next_row(l)
         elif gate.name == 'Reset':
-            # Model reset as discard (ground) then preparation |0⟩,
-            # creating a wire break.  The ground connection traces out
-            # the qubit, modelling reset as a CPTP map.
+            # Model reset as an implicit measurement with a discarded
+            # outcome, followed by fresh |0> preparation.  The Z(0)
+            # spider + X(_rN) leaf mirrors the measurement pattern.
+            # The unused boolean variable gives trace-out semantics:
+            # summing over its two values is equivalent to discarding.
             l = gate.label # type: ignore
             q = q_mapper.to_qubit(l)
             # The qubit is being reused, so clear any pending measurement
@@ -296,11 +291,18 @@ def circuit_to_graph(
             measure_targets.discard(q)
             r = q_mapper.next_row(l)
             u = q_mapper.prev_vertex(l)
-            # Effect vertex: discard the old state by tracing out.
-            effect_v = g.add_vertex(VertexType.Z, q, r, 0, ground=True)
-            g.add_edge((u, effect_v), EdgeType.SIMPLE)
-            # State vertex: prepare the new |0⟩ state.
-            state_v = g.add_vertex(VertexType.X, q, r + 1, 0)
+            # Implicit measurement (discarded outcome).
+            reset_var = new_var(
+                name="_r{}".format(reset_count),
+                is_bool=True, registry=g.var_registry)
+            reset_count += 1
+            meas_v = g.add_vertex(VertexType.Z, q, r, 0)
+            g.add_edge((u, meas_v), EdgeType.SIMPLE)
+            outcome_v = g.add_vertex(VertexType.X, q, r + 0.5, reset_var)
+            g.add_edge((meas_v, outcome_v), EdgeType.SIMPLE)
+            g.set_vdata(outcome_v, 'outcome_type', 'reset_discard')
+            # Fresh input for the new wire segment.
+            state_v = g.add_vertex(VertexType.BOUNDARY, q, r + 1, 0)
             q_mapper.set_prev_vertex(l, state_v)
             q_mapper.set_next_row(l, r + 2)
         elif gate.name == 'PostSelect':
